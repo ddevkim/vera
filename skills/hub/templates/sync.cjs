@@ -181,58 +181,60 @@ function parseVera(text, at) {
   if (!m) return null;
   const opts = Object.fromEntries((m[3].match(/[a-z]+=\S+/g) || []).map(kv => kv.split("=")));
   const hit = SUMMARY_LINE.exec(lines.slice(1).join("\n"));
-  return { kind: m[1], item: m[2], phase: opts.phase || null, outcome: opts.outcome || null, subject: m[4], at, summary: hit ? hit[1].trim() : null };
+  const subject = m[4].startsWith(`${m[2]}:`) ? m[4].slice(m[2].length + 1).trim() : m[4]; // Orca subjects already start with the id
+  return { kind: m[1], item: m[2], phase: opts.phase || null, outcome: opts.outcome || null, subject, at, summary: hit ? hit[1].trim() : null };
 }
 
-// The worker's transcript: the newest top-level .jsonl in its worktree's project folder.
+// The worker's transcript: the newest top-level .jsonl in its worktree's project folder, and how many there are.
 function transcriptOf(worktree) {
   const dir = path.join(PROJECTS, String(worktree).replace(/[^A-Za-z0-9]/g, "-"));
-  let best = null;
+  let best = null, count = 0;
   for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
     if (!f.endsWith(".jsonl")) continue;
+    count++;
     const p = path.join(dir, f), m = fs.statSync(p).mtimeMs;
     if (!best || m > best.m) best = { p, m };
   }
-  return best && best.p;
+  return { dir, file: best && best.p, count };
 }
 
-// Reads only the bytes appended since the last cycle.
+// Reads only the bytes appended since the last cycle. Lines are cut at a newline byte, so a multibyte
+// character split across two reads is decoded whole.
 const transcripts = new Map();
 function readTranscript(file) {
   let c = transcripts.get(file);
   const size = fs.statSync(file).size;
-  if (!c || size < c.offset) c = { offset: 0, rest: "", at: 0, say: null, last: null, open: new Map(), vera: [] };
+  if (!c || size < c.offset) c = { offset: 0, rest: Buffer.alloc(0), at: 0, say: null, ended: false, open: new Map(), vera: [] };
   if (size > c.offset) {
     const fd = fs.openSync(file, "r");
     const buf = Buffer.alloc(size - c.offset);
     fs.readSync(fd, buf, 0, buf.length, c.offset);
     fs.closeSync(fd);
     c.offset = size;
-    const lines = (c.rest + buf.toString("utf8")).split("\n");
-    c.rest = lines.pop();
-    for (const line of lines) {
+    const all = Buffer.concat([c.rest, buf]);
+    const cut = all.lastIndexOf(0x0a) + 1;
+    c.rest = all.subarray(cut);
+    for (const line of all.subarray(0, cut).toString("utf8").split("\n")) {
       let o; try { o = JSON.parse(line); } catch { continue; }
       if (o.type !== "assistant" && o.type !== "user") continue;
-      const t = ms(o.timestamp), content = o.message && o.message.content;
+      const t = ms(o.timestamp), msg = o.message || {}, content = msg.content;
       if (t) c.at = Math.max(c.at, t);
       if (o.type === "user") {
         for (const b of arr(content)) if (b.type === "tool_result") c.open.delete(b.tool_use_id);
-        c.last = "user";
+        c.ended = false;
         continue;
       }
-      let tool = false;
       for (const b of arr(content)) {
         if (b.type === "text" && b.text) c.say = flat(b.text, 200);
         if (b.type !== "tool_use") continue;
-        tool = true;
         c.open.set(b.id, { name: b.name, input: b.input || {}, t });
         if (/SendMessage$/.test(b.name || "")) {
           const v = parseVera(b.input && b.input.message, o.timestamp);
           if (v) c.vera.push(v);
         }
       }
-      if (tool) c.last = "tool";
-      else if (arr(content).some(b => b.type === "text")) c.last = "text"; // the turn ended with words
+      // Each content block is its own line, carrying its message's stop_reason: end_turn means the turn is over.
+      c.ended = msg.stop_reason === "end_turn";
     }
   }
   transcripts.set(file, c);
@@ -244,17 +246,21 @@ function syncAppWorkers(S, errors) {
   for (const w of arr(S.workers)) {
     if (!w.path || !w.item) continue;
     try {
-      const file = transcriptOf(w.path);
-      if (!file) continue; // its session has not written a transcript yet
-      const c = readTranscript(file);
-      vera.push(...c.vera);
+      const found = transcriptOf(w.path);
+      if (!found.file) {
+        if (w.tone !== "done") errors.push(`transcript ${w.item}: none yet in ${path.basename(found.dir)}`);
+        continue;
+      }
+      if (found.count > 1 && w.tone !== "done") errors.push(`transcript ${w.item}: ${found.count} transcripts in its folder; showing the newest`);
+      const c = readTranscript(found.file);
+      vera.push(...c.vera.filter(v => v.item === w.item)); // a worker reports only on its own item
       if (w.tone === "done") continue;
-      const open = [...c.open.values()].sort((a, b) => b.t - a.t)[0] || null;
+      const open = [...c.open.values()].sort((x, y) => y.t - x.t)[0] || null;
       const i = open ? open.input : {};
       const arg = i.command || i.file_path || i.description || i.pattern || "";
       workers[w.item] = {
         at: c.at ? new Date(c.at).toISOString() : null,
-        state: open || (c.last && c.last !== "text") ? "working" : "idle",
+        state: open || !c.ended ? "working" : "idle",
         say: c.say,
         tool: open ? `${open.name}${arg ? `: ${oneLine(arg, 80)}` : ""}` : null,
         wait: open && open.t && Date.now() - open.t >= APP_WAIT_MS ? { source: "transcript", since: open.t, reason: null } : null
@@ -281,13 +287,17 @@ function appPending(S, vera) {
   return { count: fresh.length, more: false, oldestAt: fresh.length ? fresh[0].at : null, items, notes: notesOut };
 }
 
-// Read-only static server for the pages: only .html and .js files inside the hub folder.
+// Read-only static server for the pages: only .html, .js, and .md files inside the hub folder.
 function serve() {
   const http = require("http");
-  const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
+  const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".md": "text/plain; charset=utf-8" };
   const server = http.createServer((req, res) => {
+    // Only this machine's own pages: a Host other than 127.0.0.1/localhost is DNS rebinding, and a cross-site
+    // request is another site pulling state.js in with <script src>.
+    const host = String(req.headers.host || "").replace(/:\d+$/, "");
+    if (!["127.0.0.1", "localhost"].includes(host) || req.headers["sec-fetch-site"] === "cross-site") { res.writeHead(403).end(); return; }
     let rel;
-    try { rel = decodeURIComponent(new URL(req.url, "http://x").pathname).replace(/^\/+/, "") || "dashboard.html"; }
+    try { rel = decodeURIComponent(new URL(`http://x${req.url}`).pathname).replace(/^\/+/, "") || "dashboard.html"; }
     catch { res.writeHead(400).end(); return; }
     const file = path.resolve(HUB, rel);
     const type = TYPES[path.extname(file)];
@@ -325,7 +335,7 @@ function writeLive(live) {
   fs.renameSync(tmp, LIVE); // atomic: the page never reads half a file
 }
 
-let prev = { workers: {}, prs: {}, discovered: {}, hub: null }, cycle = 0;
+let prev = { workers: {}, prs: {}, discovered: {}, hub: null }, cycle = 0, serving = false;
 async function syncOnce(withGh) {
   const started = Date.now(), errors = [];
   let S;
@@ -372,7 +382,6 @@ if (require.main !== module) {
   const stop = () => { try { if (fs.readFileSync(PID, "utf8").trim() === String(process.pid)) { fs.unlinkSync(PID); fs.rmSync(PORT, { force: true }); } } catch {} process.exit(0); };
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
-  try { if (readState().runtime === "claude-app") serve(); } catch {} // an unreadable state.js shows as an error on the page
   // One cycle at a time: the next starts CYCLE_MS after this one started, or right away when it ran longer.
   const loop = async () => {
     const t = Date.now();
@@ -380,6 +389,7 @@ if (require.main !== module) {
     let S = null;
     try { S = await syncOnce(cycle++ % GH_EVERY === 0); } catch (e) { console.error(new Date().toISOString(), e); }
     if (S && S.closed) stop(); // the hub set closed: true after the final sweep
+    if (S && S.runtime === "claude-app" && !serving) { serving = true; serve(); } // once state.js reads as a claude-app hub
     setTimeout(loop, Math.max(0, CYCLE_MS - (Date.now() - t)));
   };
   loop();

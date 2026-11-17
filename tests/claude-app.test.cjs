@@ -54,8 +54,8 @@ test("sync.cjs --once on a claude-app hub reads a worker's transcript into live.
     fs.writeFileSync(path.join(tdir, "t.jsonl"), [
       send("a", "2026-11-17T05:00:00Z", "VERA status S1 phase=red: red\nSUMMARY: 이미 반영된 상태"), done("a", "2026-11-17T05:00:01Z"),
       send("b", "2026-11-17T05:01:00Z", "VERA status S1 phase=green: green\nSUMMARY: 시험 6건이 통과합니다"), done("b", "2026-11-17T05:01:01Z"),
-      send("c", "2026-11-17T05:02:00Z", "VERA ask S1: ready for review: w1. Head abc."), done("c", "2026-11-17T05:02:01Z"),
-      { type: "assistant", timestamp: "2026-11-17T05:02:05Z", message: { content: [{ type: "text", text: "Asked the hub; ending my turn." }] } }
+      send("c", "2026-11-17T05:02:00Z", "VERA ask S1: S1: ready for review: w1. Head abc."), done("c", "2026-11-17T05:02:01Z"),
+      { type: "assistant", timestamp: "2026-11-17T05:02:05Z", message: { stop_reason: "end_turn", content: [{ type: "text", text: "Asked the hub; ending my turn." }] } }
     ].map(o => JSON.stringify(o)).join("\n") + "\n");
     execFileSync(process.execPath, [path.join(hub, "sync.cjs"), "--once"], { env: { ...process.env, VERA_TRANSCRIPTS: projects }, encoding: "utf8" });
     const live = new Function("window", `${read(path.join(hub, "live.js"))}; return window.HUB_LIVE;`)({});
@@ -63,7 +63,25 @@ test("sync.cjs --once on a claude-app hub reads a worker's transcript into live.
     assert.strictEqual(live.workers.S1.say, "Asked the hub; ending my turn.");
     assert.strictEqual(live.hub.count, 2, "only the messages after lastMsgAt are not handled yet");
     assert.strictEqual(live.hub.items.S1.last.type, "ask");
+    assert.strictEqual(live.hub.items.S1.last.subject, "S1: ready for review: w1. Head abc.", "the id shows once");
     assert.strictEqual(live.hub.items.S1.phase, "green");
     assert.deepStrictEqual(live.hub.notes.S1, { text: "시험 6건이 통과합니다", at: "2026-11-17T05:01:00Z", fresh: true });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("readTranscript decodes a Korean character split across two reads", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tr-"));
+  try {
+    const sync = require(path.join(skillDir, "templates", "sync.cjs"));
+    const file = path.join(dir, "t.jsonl");
+    const line = Buffer.from(JSON.stringify({ type: "assistant", timestamp: "2026-11-17T05:00:00Z",
+      message: { stop_reason: "end_turn", content: [{ type: "text", text: "시험이 통과합니다" }] } }) + "\n");
+    const cut = line.indexOf(Buffer.from("험")) + 1; // inside the three bytes of one character
+    fs.writeFileSync(file, line.subarray(0, cut));
+    sync.readTranscript(file);
+    fs.appendFileSync(file, line.subarray(cut));
+    const c = sync.readTranscript(file);
+    assert.strictEqual(c.say, "시험이 통과합니다");
+    assert.strictEqual(c.ended, true);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

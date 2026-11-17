@@ -47,6 +47,8 @@ In SKILL.md step 6, in place of `orca orchestration worker-start` and the `orca 
 | `model` | the standing choice; omit it to use the hub's model |
 | `permission_mode` | omit it: the worker inherits the hub's mode. A worker in another mode holds the hub's messages for approval |
 
+**Which turns can start a worker.** The app refuses `start_session` in a turn that another session's message started (a worker's VERA message, or a `<side-sessions-event>` that does not follow the developer's own turn) and offers a proposal card instead. So start workers only in a turn the developer started: step 6 on a new hub, a resume, or any turn where the developer answered or asked something. When a worker's message frees a slot (a `worker_done`, a merge approval you handled in that turn), do not call `start_session` and do not propose a card: set each item that can now start to `ext` "다음에 말씀하시면 시작합니다", add one to-do to `ask` saying that any reply to the hub starts it ("허브에 아무 말이나 답하시면 N3 를 시작합니다"), and start it in the developer's next turn. A refusal in a turn you thought was the developer's means the same: leave the item waiting as above, never retry in a loop.
+
 The result gives the worker's session id. `mcp__ccd_session_mgmt__get_session` on that id gives its worktree path. Write `session`, `path`, and the item's `branch` into its `workers` row before you start the next worker. At `medium` or `high`, run `allow.cjs write <its path> <level>` right after the receipt: the app creates the worktree as the session starts, so the list cannot exist before it, and a worker that still prompts is answered by the developer as at `low`.
 
 ## Worker to hub
@@ -68,7 +70,7 @@ The body follows on the next lines. A worker's message starts a hub turn, or wai
 
 ## Hub to worker
 
-`reply --id <askId>` and `send` are both `SendMessage` with `to: <the worker's session id>`. The message arrives in the worker as a new turn and wakes it when it is idle. `askId` holds the `at` time of the ask being answered (from live.js `hub`), or `"yes"` when live.js does not list it yet; clear it when you reply.
+`reply --id <askId>` and `send` are both `SendMessage` with `to: <the worker's session id>`. The message arrives in the worker as a new turn and wakes it when it is idle. `askId` holds the `at` time of the ask being answered, from live.js `hub` (run `node <hub>/sync.cjs --once` first when it is not listed yet); clear it when you reply.
 
 ## Protocol on the Claude app
 
@@ -76,7 +78,7 @@ When you write `protocol.md` and each task part from [worker-spec.md](worker-spe
 
 - Add this rule before rule 1: `0. MESSAGES. Every message to the hub is one SendMessage call with to: <hubSession>. Its first line is VERA <kind> <item-id>[ phase=<phase>][ outcome=<succeeded|failed>]: <subject>, the body follows on the next lines. Kinds: status (keep working after it), ask and question (end your turn after it; the hub's reply wakes you), done (your worker_done; end your turn after it). When the hub sends HUB MOVED: send every VERA message to <id>, use that id from then on. Ending a turn without ask, question, or done tells the hub you are stuck.`
 - Write each `orca orchestration ask --question "<q>"` as `VERA ask <item-id>: <q>`, and the product question in rule 8 as `VERA question <item-id>: <q>`, with "the hub's reply wakes you" for "Orca wakes you".
-- Write each `orca orchestration send --type status --phase <p> --subject "<s>" --body "<b>"` as `VERA status <item-id> phase=<p>: <s>` with `<b>` as the body, and `send --phase approval` as `VERA status <item-id> phase=approval`.
+- Write each `orca orchestration send --type status --phase <p> --subject "<item-id>: <s>" --body "<b>"` as `VERA status <item-id> phase=<p>: <s>` (the id once, in the prefix) with `<b>` as the body, and `send --phase approval` as `VERA status <item-id> phase=approval`.
 - Write each worker_done with `--outcome <o>`, and "the worker_done command from your Orca preamble", as `VERA done <item-id> outcome=<o>: <subject>`.
 - Rule 12: "its sync reads your session's transcript" for "Orca shows your current activity".
 - Rule 13: leave out the sentences that start "As a Codex worker" and "For a Codex worker", and the Codex refusal sentence.
@@ -101,7 +103,7 @@ The app's browser pane shows a `file://` page outside the project only as a stat
 In [cleanup.md](cleanup.md), "Cleaning up an item":
 
 - Step 1: `stop_session` on its session if it is still working. Do not archive it yet.
-- Step 4: only after step 3 saved the changes, `mcp__ccd_session_mgmt__archive_session` on its session (with a reason such as "PR #41 병합"); it stops the session and removes its worktree. If `git -C <repo path> worktree list` still shows the path, run `git -C <repo path> worktree remove <path>`.
+- Step 4: only after step 3 saved the changes, `mcp__ccd_session_mgmt__archive_session` on its session (with a reason such as "PR #41 병합"); it stops the session and removes its worktree. Read its result: when it says the session was not archived (still working, pinned, open on screen, or declined), leave the worktree, log the reason, and tell the developer; never remove the worktree of a session that is still live. Only when it archived and `git -C <repo path> worktree list` still shows the path, run `git -C <repo path> worktree remove <path>`.
 - Step 5: archiving keeps the local branch, as `orca worktree rm` does. `<repo path>` is the main checkout: `dirname "$(git -C <any worktree> rev-parse --path-format=absolute --git-common-dir)"`.
 
 In "Closing the hub", step 1 checks `list_sessions` and `git worktree list` in place of the Orca lists, and step 3 gives this session `hubOldTitle` back with `set_session_title` and marks it read, in place of the `orca worktree set` commands. Never archive the hub's own session.
@@ -113,4 +115,4 @@ In SKILL.md, "Start or resume", in place of the `run-use`, `worker-list`, and `i
 1. `mcp__ccd_session_mgmt__get_session` with `self`. When its id differs from `hubSession`, this is a new hub session: set `hubSession` and send every live worker `HUB MOVED: send every VERA message to <your session id> from now on.` Workers started by the old session stay nested under it in the sidebar.
 2. `mcp__ccd_session_mgmt__list_sessions` with `linked: true` (empty in a new session: use the `session` ids in `workers`), `gh pr list --author @me --state open`, and `node <hub>/sync.cjs --once`, then read `<hub>/live.js`: its `hub` lists every VERA message workers sent after `lastMsgAt`. Reconcile them as the Orca bullet says.
 
-After every event, in place of `lastMsgId`, set `lastMsgAt` to the `at` of the newest message you handled (from live.js `hub`), or the current time from `date -u +%Y-%m-%dT%H:%M:%SZ` when live.js does not list it yet.
+After every event, in place of `lastMsgId`, set `lastMsgAt` to the `at` of the newest message you handled, from live.js `hub`. When live.js does not list that message yet, run `node <hub>/sync.cjs --once` and read live.js again; never use the current time, which would mark messages that arrived meanwhile from other workers as handled.
