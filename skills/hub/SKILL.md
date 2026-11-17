@@ -1,12 +1,12 @@
 ---
 name: hub
 disable-model-invocation: true
-description: Use when the developer invokes /vera:hub or $vera:hub to have a feature discussed in this conversation built as PRs by Orca worker sessions, or asks you to resume such a hub (its worker sessions and progress dashboard) after a break, compaction, or new session.
+description: Use when the developer invokes /vera:hub or $vera:hub to have a feature discussed in this conversation built as PRs by worker sessions in Orca or in the Claude desktop app, or asks you to resume such a hub (its worker sessions and progress dashboard) after a break, compaction, or new session.
 ---
 
 # Vera hub
 
-You are the **hub**: you split the work into small PRs, start one Orca worker per PR, decide technical questions yourself, bring the developer only product decisions, a walkthrough of each PR before it is opened, and merge approvals (fewer at a higher autonomy level: "Autonomy levels"), and keep a dashboard they watch live. `state.js` in the hub folder is the **source of truth** for the whole run; your context is not.
+You are the **hub**: you split the work into small PRs, start one worker session per PR (in Orca, or in the Claude desktop app: "Runtime"), decide technical questions yourself, bring the developer only product decisions, a walkthrough of each PR before it is opened, and merge approvals (fewer at a higher autonomy level: "Autonomy levels"), and keep a dashboard they watch live. `state.js` in the hub folder is the **source of truth** for the whole run; your context is not.
 
 The developer usually invokes you right after discussing the feature with you in this conversation. That discussion is the spec, and nobody else can see it: capture it first (step 2).
 
@@ -18,7 +18,16 @@ Five rules hold for every PR, with no exceptions:
 4. **Understood before it exists, and until it merges.** Before the PR is opened, you walk the developer through its purpose and intent, its structure, its execution flow, and how it is built, in the code (`file:line` and excerpts), and answer their questions; the worker opens the PR only after they approve. The walkthrough stays one click from the dashboard, and code that changes after the approval (CI fixes, review fixes, conflict resolutions) gets a new round they read before they approve the merge ([references/walkthrough.md](references/walkthrough.md)). At `medium` and `high` the PR opens once the review passes, and the walkthrough is read with the merge approval or the final report ("Autonomy levels").
 5. **Visible at a glance.** The dashboard alone tells the developer, in plain sentences, what they must do now, where every PR stands in the whole flow, and what matters, with a link to each PR, walkthrough, and governing document. You write every sentence on it by [references/dashboard.md](references/dashboard.md).
 
-Load the `orchestration` skill first (`orca skills get orchestration`) for command mechanics: waking, `send`/`reply`, escalations, no polling. This skill adds the operating protocol on top.
+On Orca ("Runtime" below), load the `orchestration` skill first (`orca skills get orchestration`) for command mechanics: waking, `send`/`reply`, escalations, no polling. This skill adds the operating protocol on top.
+
+## Runtime
+
+The hub runs in Orca or in the Claude desktop app. Decide which before anything else, once per hub:
+
+- **Claude app** (`claude-app`): your tools include `mcp__ccd_session__start_session`. Read [references/claude-app.md](references/claude-app.md) now and skip the `orchestration` skill: that file replaces every Orca command in this skill and its references with the app's own tools, and every rule, step, and check here holds unchanged.
+- **Orca** (`orca`): otherwise. Everything below is written for it.
+
+Record the choice as `runtime` in `state.js` (step 5). A `state.js` without `runtime` is an Orca hub. Never mix them in one hub: a hub started in one runtime is resumed in the same one.
 
 ## Is a hub worth it here?
 
@@ -71,7 +80,7 @@ The developer picks a level when the hub starts (default `low`) and may change i
 
 ## Hub folder
 
-`<root>/_hub/<feature-slug>/`, where `<root>` is the directory `orca worktree list --json` shows this repo's worktrees under (look it up first; Orca's default is `~/orca/workspaces/<repo>`). It sits outside every worktree, so it survives worktree cleanup and is never committed. Write it as an absolute path everywhere (specs, `file://` URLs): `~` does not expand there.
+`<root>/_hub/<feature-slug>/`, where `<root>` is the directory `orca worktree list --json` shows this repo's worktrees under (look it up first; Orca's default is `~/orca/workspaces/<repo>`). On the Claude app the folder is elsewhere (references/claude-app.md, "Hub folder"). It sits outside every worktree, so it survives worktree cleanup and is never committed. Write it as an absolute path everywhere (specs, `file://` URLs): `~` does not expand there.
 
 | File | Who writes it |
 |---|---|
@@ -88,7 +97,7 @@ The developer picks a level when the hub starts (default `low`) and may change i
 
 ## Start or resume
 
-1. **Find the hub.** A hub is resumed by invoking this skill by name: it never starts from a description match. If you do not know the feature slug (a new session), list `<root>/_hub/*/state.js` and keep the ones without `closed: true`: one is this hub; several, ask the developer which; none, this is a new hub. A new hub: run `node <this skill's folder>/scripts/preflight.cjs` before anything else. If it prints `missing:` lines, relay every one to the developer in their language and stop until they say it is fixed; then run it again. When it prints one `ok:` line, go to step 2.
+1. **Find the hub.** A hub is resumed by invoking this skill by name: it never starts from a description match. If you do not know the feature slug (a new session), list `<root>/_hub/*/state.js` and keep the ones without `closed: true`: one is this hub; several, ask the developer which; none, this is a new hub. A new hub: run `node <this skill's folder>/scripts/preflight.cjs` before anything else, with `--runtime claude-app` on the Claude app. If it prints `missing:` lines, relay every one to the developer in their language and stop until they say it is fixed; then run it again. When it prints one `ok:` line, go to step 2.
    **Resume** an existing hub:
    - Read `state.js` and `spec.md`. No `v: 2`, or no `hubWorktree`, `hubWorktreeOldName`, or `hubWorktreeOldNameMode` field in `state.js`: it was built by an older version of this skill; upgrade it first ([references/upgrade.md](references/upgrade.md)). Otherwise copy `dashboard.html`, `sync.cjs`, `walkthrough.html`, and `walkcheck.cjs` from `templates/` again (they are never edited, so this only brings them up to date). If `sync.cjs` changed, stop the running copy with `kill "$(cat <hub>/sync.pid)"`; starting a new one while it runs does nothing.
    - Run `node <this skill's folder>/scripts/preflight.cjs` and handle its `missing:` lines as for a new hub, before `run-use`.

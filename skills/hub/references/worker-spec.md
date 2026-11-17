@@ -1,6 +1,6 @@
 # Worker spec
 
-Every worker gets one file: `<hub>/specs/<item-id>.md` = the task part below + the full `<hub>/protocol.md`. Pass it with `--spec-file`. Workers do not see your conversation, the dashboard, or earlier workers' chats: everything they need is in this file or in repo paths it names.
+Every worker gets one file: `<hub>/specs/<item-id>.md` = the task part below + the full `<hub>/protocol.md`. Pass it with `--spec-file`. On the Claude app, write both with the changes in [claude-app.md](claude-app.md), "Protocol on the Claude app". Workers do not see your conversation, the dashboard, or earlier workers' chats: everything they need is in this file or in repo paths it names.
 
 Korean strings in this file are examples for a Korean-speaking developer: write the same meaning in the developer's language ([SKILL.md](../SKILL.md), "Language").
 
