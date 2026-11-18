@@ -13,14 +13,14 @@ At the start of each round set the item `review`, `reviewRound` + 1 (a round res
 
 ## Changed-lines hash
 
-One hash of the file names, the added and removed lines, and binary or mode changes, nothing else. A clean rebase keeps it, so a review and a walkthrough still hold; any edit to the item's own lines changes it. (`git patch-id` is not used: it also hashes nearby unchanged lines, so a clean rebase can change it.) Store all 40 characters.
+One hash of the file names, the added and removed lines, and binary or mode changes, nothing else. A clean rebase keeps it, so a review and a walkthrough still hold; adding, removing, or changing any of the item's own lines changes it. It covers which lines were added and removed, not where: an added line moved to another place in the same hunk keeps it. (`git patch-id` is not used: it also hashes nearby unchanged lines, so a clean rebase can change it.) Store all 40 characters.
 
 ```bash
 git -C <dir> fetch origin
 node <hub>/diffhash.cjs <dir> origin/<base> <head>
 ```
 
-`templates/diffhash.cjs` runs `git diff` on `origin/<base>...<head>` with fixed prefixes, no colour, no renames, and unquoted paths, so a user's git settings cannot change it, keeps the lines that start with `diff --git`, `+`, `-`, `Binary files`, `old mode`, or `new mode`, and hashes them as a git blob. A `cannot hash:` line (exit 2) is not a hash: never record or compare it; fix the ref (`git fetch origin`) or the path and run it again. The old pipeline printed the hash of empty input when `git diff` failed, so two failures compared equal.
+`templates/diffhash.cjs` runs `git diff` on `origin/<base>...<head>` with fixed prefixes, no colour, no renames, unquoted paths, and pinned submodule format, algorithm, file order, path root, and textconv, so the git settings that change those cannot change it, keeps the lines that start with `diff --git`, `+`, `-`, `Binary files`, `old mode`, or `new mode`, and hashes them as a git blob. A `cannot hash:` line (exit 2) is not a hash: never record or compare it; fix the ref (`git fetch origin`) or the path and run it again. A Node "Cannot find module" error is not a hash either: the hub folder was built before this script existed, so copy `diffhash.cjs` from this skill's `templates/` and run it again. The old pipeline printed the hash of empty input when `git diff` failed, so two failures compared equal.
 
 - Before the push: `<dir>` is the worker's worktree and `<head>` is `HEAD`.
 - After the push: `<head>` is `origin/<branch>`, from the worktree or the repo path, so the hash is of what GitHub will merge.
