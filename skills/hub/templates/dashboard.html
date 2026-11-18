@@ -136,7 +136,7 @@ const L10N = {
     justNow: "방금", minAgo: m => `${m}분 전`, hAgo: (h, m) => `${h}시간 ${m}분 전`,
     waitReason: r => `입력 대기: ${r}`, wait: "입력 대기", waitMin: m => `입력 대기 ${m}분`,
     kWait: "입력 대기", kNeed: "직접 할 일", kDec: "결정", kWalk: "워크스루 승인", kMerge: "병합 승인", kBlocked: "막힘",
-    waitText: (id, w) => `작업자 ${id} 가 터미널에서 답을 기다립니다 (${w}).`, waitHow: "Orca 사이드바에서 그 작업자를 열어 답합니다.",
+    waitText: (id, w) => `작업자 ${id} 가 터미널에서 답을 기다립니다 (${w}).`, waitHow: "Orca 사이드바에서 그 작업자를 열어 답합니다.", waitHowApp: "앱 사이드바에서 그 작업자 세션을 열어 답합니다.",
     needHow: "끝나면 허브 대화에 알려 줍니다.", recommend: " · 허브 권장", decHow: "허브 대화에서 답합니다.", decWaits: ids => ` 이 답을 기다리는 작업: ${ids}`,
     walkHow: "워크스루를 읽고 허브 대화에서 승인하거나 질문합니다. 승인해야 PR 이 열립니다.", changed: "승인 뒤 변경",
     mergeHow: id => `허브 대화에 "${id} 병합해" 라고 답합니다.`, blockedHow: "허브 대화에서 어떻게 풀지 정합니다.",
@@ -173,7 +173,7 @@ const L10N = {
     justNow: "just now", minAgo: m => `${m} min ago`, hAgo: (h, m) => `${h} h ${m} min ago`,
     waitReason: r => `Waiting for input: ${r}`, wait: "Waiting for input", waitMin: m => `Waiting for input ${m} min`,
     kWait: "Input", kNeed: "Your task", kDec: "Decision", kWalk: "Walkthrough", kMerge: "Merge", kBlocked: "Blocked",
-    waitText: (id, w) => `Worker ${id} waits for an answer in its terminal (${w}).`, waitHow: "Open that worker in the Orca sidebar and answer.",
+    waitText: (id, w) => `Worker ${id} waits for an answer in its terminal (${w}).`, waitHow: "Open that worker in the Orca sidebar and answer.", waitHowApp: "Open that worker's session in the app sidebar and answer.",
     needHow: "Tell the hub when it is done.", recommend: " · hub suggests", decHow: "Answer in the hub chat.", decWaits: ids => ` Waiting on this: ${ids}`,
     walkHow: "Read the walkthrough, then approve or ask in the hub chat. The PR opens after you approve.", changed: "Changed after OK",
     mergeHow: id => `Reply "merge ${id}" in the hub chat.`, blockedHow: "Decide in the hub chat how to unblock it.",
@@ -296,7 +296,7 @@ function render() {
   const started = new Set(S.workers.map(w => w.item));
   // Everything only the developer can do, most blocking first. Each row: what it is, where to look, how to answer.
   const todo = [
-    ...waiting.map(([id, w]) => ({ kind: T.kWait, text: T.waitText(jump(id), esc(waitLabel(w))), how: T.waitHow })),
+    ...waiting.map(([id, w]) => ({ kind: T.kWait, text: T.waitText(jump(id), esc(waitLabel(w))), how: S.runtime === "claude-app" ? T.waitHowApp : T.waitHow })),
     ...list(S.needs).map(n => typeof n === "string" ? { text: n } : n || {}).filter(n => n.text).map(n => ({ kind: T.kNeed, text: esc(n.text), how: esc(n.how || T.needHow) })),
     ...openDecisions.map(d => ({ kind: T.kDec, text: `${d.id ? `<b>${esc(d.id)}</b> ` : ""}${esc(d.text)}`,
       opts: list(d.options).map(o => `<span class="opt ${o === d.recommend ? "rec" : ""}">${esc(o)}${o === d.recommend ? T.recommend : ""}</span>`).join(""),

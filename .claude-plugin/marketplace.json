@@ -10,7 +10,7 @@
     {
       "name": "vera",
       "source": "./",
-      "description": "Build a discussed feature as PRs through Orca worker sessions, with walkthroughs and a live dashboard"
+      "description": "Build a discussed feature as PRs through worker sessions in Orca or the Claude desktop app, with walkthroughs and a live dashboard"
     }
   ]
 }

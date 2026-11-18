@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 "use strict";
 // Checks what a new Vera hub needs before it starts. Installs nothing.
+// --runtime claude-app checks the Claude desktop app instead of Orca (SKILL.md, "Runtime").
 // Prints one "ok:" line and exits 0, or one "missing:" line per failed check and exits 1.
 const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const runtimeArg = process.argv.indexOf("--runtime");
+const RUNTIME = runtimeArg > 0 ? process.argv[runtimeArg + 1] : "orca";
 
 const TIMEOUT_MS = Number(process.env.PREFLIGHT_TIMEOUT_MS) || 10000;
 
@@ -31,18 +38,26 @@ const git = run("git", ["--version"]);
 if (git.ok) found.git = (git.out.match(/\d+\.\d+(\.\d+)?/) || [git.out.trim()])[0];
 else missing.push(`${why(git, "git") || "git does not run"} — install git: https://git-scm.com/downloads`);
 
-const orca = run("orca", ["--version"]);
-if (!orca.ok) {
-  missing.push(`${why(orca, "Orca") || "the orca CLI does not run"} — get Orca at https://orca.dev`);
+if (RUNTIME === "claude-app") {
+  // Workers are Claude app sessions; sync.cjs reads their transcripts from here.
+  const transcripts = path.join(os.homedir(), ".claude", "projects");
+  if (!fs.existsSync(transcripts)) missing.push(`no Claude Code transcripts at ${transcripts} — run the hub from a Claude desktop app session`);
+} else if (RUNTIME !== "orca") {
+  missing.push(`unknown runtime "${RUNTIME}" — use orca or claude-app`);
 } else {
-  found.orca = orca.out.trim().split("\n")[0];
-  const repos = run("orca", ["repo", "list", "--json"]);
-  if (!repos.ok) {
-    const said = repos.out.trim().split("\n")[0];
-    missing.push(`Orca does not answer (${why(repos, "orca") || `orca repo list failed${said ? `: ${said}` : ""}`}) — open the Orca app if it is closed`);
+  const orca = run("orca", ["--version"]);
+  if (!orca.ok) {
+    missing.push(`${why(orca, "Orca") || "the orca CLI does not run"} — get Orca at https://orca.dev`);
+  } else {
+    found.orca = orca.out.trim().split("\n")[0];
+    const repos = run("orca", ["repo", "list", "--json"]);
+    if (!repos.ok) {
+      const said = repos.out.trim().split("\n")[0];
+      missing.push(`Orca does not answer (${why(repos, "orca") || `orca repo list failed${said ? `: ${said}` : ""}`}) — open the Orca app if it is closed`);
+    }
+    const skill = run("orca", ["skills", "get", "orchestration"]);
+    if (!skill.ok) missing.push(`the Orca orchestration skill is not available — run: orca skills install --skill orchestration`);
   }
-  const skill = run("orca", ["skills", "get", "orchestration"]);
-  if (!skill.ok) missing.push(`the Orca orchestration skill is not available — run: orca skills install --skill orchestration`);
 }
 
 const auth = run("gh", ["auth", "status"]);
@@ -55,4 +70,5 @@ if (missing.length) {
   for (const line of missing) console.log(`missing: ${line}`);
   process.exit(1);
 }
-console.log(`ok: orca ${found.orca}, gh ${found.gh}, node ${found.node}, git ${found.git}`);
+if (RUNTIME === "claude-app") console.log(`ok: claude-app, gh ${found.gh}, node ${found.node}, git ${found.git}`);
+else console.log(`ok: orca ${found.orca}, gh ${found.gh}, node ${found.node}, git ${found.git}`);

@@ -15,6 +15,10 @@ window.HUB_STATE = {
   hubWorktreeOldName: "",    // the parent's display name before the hub renamed it ("" when the hub renamed nothing): restored at close
   hubWorktreeOldNameMode: "", // the parent's displayNameMode before the rename ("" when the hub renamed nothing)
   lastMsgId: "",             // id of the last Orca message handled: resume handles the inbox messages after it
+  runtime: "orca",           // "orca" | "claude-app" (SKILL.md, "Runtime"); absent = "orca". The next three are claude-app only:
+  hubSession: "",            // the hub's Claude app session id: workers send their VERA messages to it (references/claude-app.md)
+  hubOldTitle: "",           // the hub session's title before the hub renamed it: restored at close
+  lastMsgAt: "",             // ISO time of the newest worker message handled: sync.cjs marks later ones as not handled yet
   v: 2,                      // layout version: review before walkthrough. A state.js without it is upgraded first (references/upgrade.md)
   autonomy: "low",          // "low" | "medium" | "high": what the hub leaves to the developer (SKILL.md); absent or unknown = "low"
   lang: "ko",                // "ko" or "en": the page's own labels; the hub's sentences follow SKILL.md, "Language"
@@ -40,7 +44,7 @@ window.HUB_STATE = {
     // tone: active (item work up to its worker_done, counts toward workerCap) | support (PR open after worker_done: waits for merge,
     //       or is reopened for a rebase or review fixes; does not count) | done (cleaned up; keep the row, the final sweep reads its path)
     { lane: "기반", item: "N2", worktree: "app-notify-n2-rules", state: "구현 중", tone: "active",
-      dispatch: "ctx_xxxxxxxx", path: "/Users/me/orca/workspaces/app/app-notify-n2-rules" },  // dispatch, path: sync.cjs and cleanup use them
+      dispatch: "ctx_xxxxxxxx", path: "/Users/me/orca/workspaces/app/app-notify-n2-rules" },  // dispatch, path: sync.cjs and cleanup use them (claude-app: session in place of dispatch)
     { lane: "기반", item: "N1", worktree: "app-notify-n1-table", state: "병합 승인 대기", tone: "support",
       dispatch: "ctx_yyyyyyyy", path: "/Users/me/orca/workspaces/app/app-notify-n1-table" }
   ],

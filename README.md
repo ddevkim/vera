@@ -4,7 +4,7 @@ Vera is a set of agent skills by ddevkim for work that is verified before it is 
 
 | Skill | What it does |
 |---|---|
-| [hub](skills/hub) | Builds a feature you discussed with your agent as small PRs through Orca worker sessions, with an independent review, a walkthrough of each PR, and a live dashboard. |
+| [hub](skills/hub) | Builds a feature you discussed with your agent as small PRs through worker sessions in Orca or the Claude desktop app, with an independent review, a walkthrough of each PR, and a live dashboard. |
 
 ## hub
 
@@ -21,7 +21,7 @@ You discuss a feature with Claude Code or Codex, then invoke the hub. Your sessi
 
 ### Prerequisites
 
-- The Orca app, its `orca` CLI, and its `orchestration` skill
+- One place to run workers: the Orca app with its `orca` CLI and its `orchestration` skill, or the Claude desktop app (Code tab)
 - `git`
 - `gh`, logged in
 - `node`
@@ -32,7 +32,7 @@ The skill installs nothing. It checks these itself before a hub starts, with one
 node <skill folder>/scripts/preflight.cjs
 ```
 
-It prints one `missing:` line per problem. A missing `orchestration` skill comes with the command that installs it: `orca skills install --skill orchestration`.
+It prints one `missing:` line per problem. A missing `orchestration` skill comes with the command that installs it: `orca skills install --skill orchestration`. In the Claude desktop app the hub adds `--runtime claude-app`, which checks the app instead of Orca.
 
 ### Install
 
@@ -75,6 +75,17 @@ The hub then asks you for:
 - permission prompts in worker terminals.
 
 That list is the **Low** autonomy level, the default. Tell the hub at the start or at any time to run at **Medium** (PRs open after the independent review, workers may push, open PRs, and delete files in their worktree without a prompt; you still answer product decisions and approve merges) or **High** (the hub also decides product questions, merges on green CI, and runs the repo's documented deploy steps, stopping only for risky steps such as dropping data, spending money, or changing secrets).
+
+### In the Claude desktop app
+
+The hub also runs in a Claude desktop app session (Code tab), without Orca. It finds out where it runs by itself: when its session can start other app sessions, each worker is an app session in its own worktree, nested under the hub's session in the sidebar; otherwise it uses Orca as above. Everything else is the same: the spec, the split, TDD, the independent review, the walkthrough, the autonomy levels, and the dashboard.
+
+- Install the plugin as for Claude Code, run `/reload-plugins` in the app session, then invoke `/vera:hub`.
+- The dashboard opens in the app's browser pane from a local address the hub's sync serves, because the pane shows local files outside the project only as snapshots.
+- Workers inherit the hub session's permission mode, and every worker is a Claude Code session: Codex workers need Orca.
+- The hub folder is `.vera/workspaces/<repo>/_hub/<feature>/` in your home directory.
+
+[skills/hub/references/claude-app.md](skills/hub/references/claude-app.md) lists how each Orca command maps to the app.
 
 ### Language
 
