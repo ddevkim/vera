@@ -304,11 +304,13 @@ test("the hub is told to read the whole skill again after a compaction, in the p
   assert.ok(at < 4000, `the compaction paragraph starts at ${at}, beyond the first 4,000 characters a compaction keeps`);
   assert.ok(at < loop, "the compaction paragraph comes after the Loop heading");
   const paragraph = skill.slice(at).split("\n\n")[0];
+  // 5,000 re-attached tokens are at least 15,000 characters at 3 characters per token, so 6,000 leaves a wide margin.
+  assert.ok(at + paragraph.length < 6000, `the compaction paragraph ends at ${at + paragraph.length}, beyond the first 6,000 characters a compaction keeps`);
   assert.match(paragraph, /`state\.js`/, "the paragraph does not name state.js");
   assert.match(paragraph, /`lastMsgId`/, "the paragraph does not name lastMsgId");
   assert.match(paragraph, /this skill's folder/, "the paragraph does not say where to read the file from");
   assert.match(paragraph, /\breview\b/, "the paragraph does not mention the review");
-  assert.match(paragraph, /do not restart|not restart/i, "the paragraph does not tell the hub to leave a running review alone");
+  assert.match(paragraph, /not restart/, "the paragraph does not tell the hub to leave a running review alone");
   // 5,000 tokens at up to 4.5 characters per token (plain English): the safe bound is the larger one.
   assert.ok(loop > 22500, `the Loop heading starts at ${loop}, within 22,500 characters (5,000 tokens at 4.5 characters per token), so a compaction may keep it: the compaction note can be reconsidered`);
 });
