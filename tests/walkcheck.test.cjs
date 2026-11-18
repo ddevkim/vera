@@ -39,12 +39,12 @@ function setup(t) {
   return { root, wt, data };
 }
 
-function walkcheck({ root, wt }, data) {
+function walkcheck({ root, wt }, data, base = "origin/main") {
   const file = path.join(root, "walks", "S9-w1.js");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, "window.HUB_WALK = " + JSON.stringify(data) + ";\n");
-  const r = spawnSync(process.execPath, [WALKCHECK, file, wt, "origin/main"], { env, encoding: "utf8" });
-  return { code: r.status, out: r.stdout, diff: path.join(root, "walks", "S9-w1.diff.js") };
+  const r = spawnSync(process.execPath, [WALKCHECK, file, wt, base], { env, encoding: "utf8" });
+  return { code: r.status, out: r.stdout, err: r.stderr, diff: path.join(root, "walks", "S9-w1.diff.js") };
 }
 
 test("each walkcheck test removes its temp folder", async t => {
@@ -94,4 +94,42 @@ test("walkcheck fails when the worktree has uncommitted changes", t => {
   const r = walkcheck(s, s.data);
   assert.strictEqual(r.code, 1);
   assert.match(r.out, /the worktree has uncommitted changes/);
+});
+
+// A check that could not run is not a problem in the walkthrough: one "cannot check:" line, exit 2, no stack trace, no diff file.
+function assertCannotCheck(r, reason) {
+  assert.strictEqual(r.code, 2);
+  assert.match(r.out, /^cannot check: [^\n]+\n$/);
+  assert.match(r.out, reason);
+  assert.ok(!/node:|^\s+at /m.test(r.out + r.err), `no stack trace: ${r.err}`);
+  assert.strictEqual(r.err, "");
+  assert.ok(!fs.existsSync(r.diff));
+}
+
+test("walkcheck says it cannot check when the base ref does not exist", t => {
+  const s = setup(t);
+  const r = walkcheck(s, s.data, "origin/nope");
+  assertCannotCheck(r, /origin\/nope/);
+});
+
+test("walkcheck says it cannot check when the worktree path is not a git repo", t => {
+  const s = setup(t);
+  const plain = path.join(s.root, "plain");
+  fs.mkdirSync(plain);
+  const r = walkcheck({ ...s, wt: plain }, s.data);
+  assertCannotCheck(r, /plain/);
+});
+
+test("walkcheck says it cannot check when the worktree path does not exist", t => {
+  const s = setup(t);
+  const gone = path.join(s.root, "gone");
+  const r = walkcheck({ ...s, wt: gone }, s.data);
+  assertCannotCheck(r, /gone/);
+});
+
+test("walkcheck says it cannot check when the data file does not exist", t => {
+  const s = setup(t);
+  const missing = path.join(s.root, "walks", "nope.js");
+  const r = spawnSync(process.execPath, [WALKCHECK, missing, s.wt, "origin/main"], { env, encoding: "utf8" });
+  assertCannotCheck({ code: r.status, out: r.stdout, err: r.stderr, diff: path.join(s.root, "walks", "nope.diff.js") }, /nope\.js/);
 });
