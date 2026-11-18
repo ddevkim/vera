@@ -85,3 +85,26 @@ test("readTranscript decodes a Korean character split across two reads", () => {
     assert.strictEqual(c.ended, true);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("sync.cjs reads the documented approval line, skips local slash commands, and drops failed sends", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tr-"));
+  try {
+    const sync = require(path.join(skillDir, "templates", "sync.cjs"));
+    const at = "2026-11-18T00:00:00Z";
+    assert.strictEqual(sync.parseVera("VERA status S1 phase=approval\ngit push -u origin HEAD", at).phase, "approval");
+    const line = o => JSON.stringify({ timestamp: at, ...o });
+    const send = (id, message) => line({ type: "assistant", message: { stop_reason: "tool_use", content: [{ type: "tool_use", id, name: "SendMessage", input: { message } }] } });
+    const result = (id, is_error) => line({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error, content: "" }] } });
+    const file = path.join(dir, "t.jsonl");
+    fs.writeFileSync(file, [
+      send("x", "VERA ask S1: q"), result("x", true), send("y", "VERA ask S1: q"), result("y", false),
+      line({ type: "assistant", message: { stop_reason: "end_turn", content: [{ type: "text", text: "Asked the hub." }] } }),
+      line({ type: "user", isMeta: true, message: { content: "<local-command-caveat>…</local-command-caveat>" } }),
+      line({ type: "user", message: { content: "<command-name>/model</command-name>" } }),
+      line({ type: "user", message: { content: "<local-command-stdout>Set model</local-command-stdout>" } })
+    ].join("\n") + "\n");
+    const c = sync.readTranscript(file);
+    assert.strictEqual(c.ended, true, "a local slash command starts no turn");
+    assert.deepStrictEqual(c.vera.map(v => v.kind), ["ask"], "the failed send is not counted");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

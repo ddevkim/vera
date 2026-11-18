@@ -170,7 +170,7 @@ async function syncWorkers(S, ps, discovered, errors) {
 
 // ---- Claude app runtime (state.js runtime: "claude-app"; references/claude-app.md) ----
 const APP_WAIT_MS = 5 * 60000; // a tool call open this long may be a permission prompt
-const VERA = /^VERA\s+(status|ask|question|done)\s+([A-Za-z0-9_-]+)((?:\s+[a-z]+=\S+)*)\s*:\s*(.*)$/;
+const VERA = /^VERA\s+(status|ask|question|done)\s+([A-Za-z0-9_-]+)((?:\s+[a-z]+=\S+)*)\s*(?::\s*(.*))?$/;
 const VERA_TYPE = { status: "status", ask: "ask", question: "question", done: "worker_done" }; // VERA kind → Orca type
 const ms = t => { const v = Date.parse(t || ""); return Number.isFinite(v) ? v : 0; };
 
@@ -181,7 +181,8 @@ function parseVera(text, at) {
   if (!m) return null;
   const opts = Object.fromEntries((m[3].match(/[a-z]+=\S+/g) || []).map(kv => kv.split("=")));
   const hit = SUMMARY_LINE.exec(lines.slice(1).join("\n"));
-  const subject = m[4].startsWith(`${m[2]}:`) ? m[4].slice(m[2].length + 1).trim() : m[4]; // Orca subjects already start with the id
+  const raw = m[4] || "";
+  const subject = raw.startsWith(`${m[2]}:`) ? raw.slice(m[2].length + 1).trim() : raw; // Orca subjects already start with the id
   return { kind: m[1], item: m[2], phase: opts.phase || null, outcome: opts.outcome || null, subject, at, summary: hit ? hit[1].trim() : null };
 }
 
@@ -204,7 +205,7 @@ const transcripts = new Map();
 function readTranscript(file) {
   let c = transcripts.get(file);
   const size = fs.statSync(file).size;
-  if (!c || size < c.offset) c = { offset: 0, rest: Buffer.alloc(0), at: 0, say: null, ended: false, open: new Map(), vera: [] };
+  if (!c || size < c.offset) c = { offset: 0, rest: Buffer.alloc(0), at: 0, say: null, ended: false, open: new Map(), sent: new Map(), vera: [] };
   if (size > c.offset) {
     const fd = fs.openSync(file, "r");
     const buf = Buffer.alloc(size - c.offset);
@@ -220,8 +221,17 @@ function readTranscript(file) {
       const t = ms(o.timestamp), msg = o.message || {}, content = msg.content;
       if (t) c.at = Math.max(c.at, t);
       if (o.type === "user") {
-        for (const b of arr(content)) if (b.type === "tool_result") c.open.delete(b.tool_use_id);
-        c.ended = false;
+        for (const b of arr(content)) {
+          if (b.type !== "tool_result") continue;
+          c.open.delete(b.tool_use_id);
+          // A VERA message counts once its SendMessage returned without an error.
+          const v = c.sent.get(b.tool_use_id);
+          if (v && !b.is_error) c.vera.push(v);
+          c.sent.delete(b.tool_use_id);
+        }
+        const text = typeof content === "string" ? content : arr(content).filter(b => b.type === "text").map(b => b.text || "").join("");
+        if (/^\[Request interrupted by user/.test(text)) c.ended = true; // an interrupt ends the turn
+        else if (!o.isMeta && !/^\s*<(command-name|local-command-)/.test(text)) c.ended = false; // local slash commands start no turn
         continue;
       }
       for (const b of arr(content)) {
@@ -230,7 +240,7 @@ function readTranscript(file) {
         c.open.set(b.id, { name: b.name, input: b.input || {}, t });
         if (/SendMessage$/.test(b.name || "")) {
           const v = parseVera(b.input && b.input.message, o.timestamp);
-          if (v) c.vera.push(v);
+          if (v) c.sent.set(b.id, v);
         }
       }
       // Each content block is its own line, carrying its message's stop_reason: end_turn means the turn is over.
