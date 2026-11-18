@@ -1,20 +1,35 @@
 #!/usr/bin/env node
 /* Checks a walkthrough data file against the worker's committed head, before anyone shows it to the developer.
    Usage: node <hub>/walkcheck.cjs <hub>/walkthroughs/<id>-w<n>.js <worktree path> origin/<base>
-   Prints one line per problem and exits 1, or prints "ok" and exits 0. It never changes the worktree.
+   Exit 1: it prints one line per problem in the walkthrough. Exit 0: it prints "ok". Exit 2: the check could not run (wrong arguments, or the
+   data file, the worktree path, or the base ref is unusable): it prints one line "cannot check: <reason>" and writes nothing. That line is
+   about how it was run, not about the walkthrough. It never changes the worktree.
    On "ok" it also writes <id>-w<n>.diff.js beside the data file: the per-file diff the page shows, taken from git. */
 "use strict";
 const fs = require("fs");
 const { execFileSync } = require("child_process");
 
 const [file, wt, base] = process.argv.slice(2);
-if (!file || !wt || !base) { console.log("usage: walkcheck.cjs <data.js> <worktree> origin/<base>"); process.exit(2); }
+const cannot = why => { console.log(`cannot check: ${why}`); process.exit(2); };
+if (!file || !wt || !base) cannot("usage: walkcheck.cjs <data.js> <worktree> origin/<base>");
 const problems = [];
-const git = (...a) => execFileSync("git", ["-c", "core.quotePath=false", "-C", wt, ...a], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+const run = (...a) => execFileSync("git", ["-c", "core.quotePath=false", "-C", wt, ...a], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+// A git command that fails here is not a problem in the walkthrough: the check cannot be made.
+const git = (...a) => {
+  try { return run(...a); } catch (e) { return cannot(`git ${a[0]} failed in ${wt}: ${String(e.stderr || e.message).trim().split("\n")[0]}`); }
+};
+
+// 0. The check can run: the data file is readable, the path is a git worktree, and the base ref is a commit.
+let text = "";
+try { text = fs.readFileSync(file, "utf8"); } catch (e) { cannot(`the data file ${file} ${e.code === "ENOENT" ? "does not exist" : `cannot be read (${e.code || e.message})`}`); }
+let inside = "";
+try { inside = run("rev-parse", "--is-inside-work-tree").trim(); } catch { /* not a repo: reported below */ }
+if (inside !== "true") cannot(`${wt} is not a git work tree (or does not exist)`);
+try { run("rev-parse", "--verify", "--quiet", `${base}^{commit}`); } catch { cannot(`the base ref ${base} does not resolve to a commit in ${wt}: run git fetch origin, or check the ref`); }
 
 // 1. Plain data only: the page runs this file as a script, so anything but JSON could execute.
 let D = null;
-const m = fs.readFileSync(file, "utf8").match(/^\s*window\.HUB_WALK\s*=\s*([\s\S]*?);?\s*$/);
+const m = text.match(/^\s*window\.HUB_WALK\s*=\s*([\s\S]*?);?\s*$/);
 try { D = m ? JSON.parse(m[1]) : null; } catch { D = null; }
 if (!D || typeof D !== "object") {
   console.log("not plain JSON data: write the file as `window.HUB_WALK = <JSON.stringify output>;` with nothing else");
@@ -35,9 +50,9 @@ if (!/^[0-9a-f]{7,40}$/.test(String(D.head || "")) || !head.startsWith(String(D.
 const lines = new Map();
 const fileLines = f => {
   if (!lines.has(f)) {
-    let text = null;
-    try { text = git("show", `HEAD:${f}`); } catch { text = null; }
-    lines.set(f, text === null ? null : text.replace(/\n$/, "").split("\n"));
+    let src = null;
+    try { src = run("show", `HEAD:${f}`); } catch { src = null; }
+    lines.set(f, src === null ? null : src.replace(/\n$/, "").split("\n"));
   }
   return lines.get(f);
 };
@@ -106,6 +121,8 @@ const diffFiles = raw.split(/^(?=diff --git )/m).filter(Boolean).map(chunk => {
   return lines.length > MAX_LINES ? { path, omitted: lines.length } : { path, lines };
 });
 const out = file.replace(/\.js$/, "") + ".diff.js";
-fs.writeFileSync(`${out}.${process.pid}.tmp`, "window.HUB_DIFF = " + JSON.stringify({ head: head.slice(0, 7), base, files: diffFiles }) + ";\n");
-fs.renameSync(`${out}.${process.pid}.tmp`, out);
+try {
+  fs.writeFileSync(`${out}.${process.pid}.tmp`, "window.HUB_DIFF = " + JSON.stringify({ head: head.slice(0, 7), base, files: diffFiles }) + ";\n");
+  fs.renameSync(`${out}.${process.pid}.tmp`, out);
+} catch (e) { cannot(`the diff file ${out} cannot be written (${e.code || e.message})`); }
 console.log("ok");
