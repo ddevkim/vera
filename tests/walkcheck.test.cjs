@@ -133,3 +133,42 @@ test("walkcheck says it cannot check when the data file does not exist", t => {
   const r = spawnSync(process.execPath, [WALKCHECK, missing, s.wt, "origin/main"], { env, encoding: "utf8" });
   assertCannotCheck({ code: r.status, out: r.stdout, err: r.stderr, diff: path.join(s.root, "walks", "nope.diff.js") }, /nope\.js/);
 });
+
+test("walkcheck says it cannot check when the arguments are missing", t => {
+  const s = setup(t);
+  const r = spawnSync(process.execPath, [WALKCHECK, path.join(s.root, "walks", "S9-w1.js")], { env, encoding: "utf8" });
+  assertCannotCheck({ code: r.status, out: r.stdout, err: r.stderr, diff: path.join(s.root, "walks", "S9-w1.diff.js") }, /^cannot check: usage: walkcheck\.cjs <data\.js> <worktree> origin\/<base>\n$/);
+});
+
+test("walkcheck says it cannot check when the path is a bare repo, not a work tree", t => {
+  const s = setup(t);
+  const bare = path.join(s.root, "bare.git");
+  git(s.root, "clone", "-q", "--bare", path.join(s.root, "origin"), bare);
+  const r = walkcheck({ ...s, wt: bare }, s.data);
+  assertCannotCheck(r, /bare\.git is not a git work tree/);
+});
+
+test("walkcheck says it cannot check when the path is inside .git, not a work tree", t => {
+  const s = setup(t);
+  const r = walkcheck({ ...s, wt: path.join(s.wt, ".git") }, s.data);
+  assertCannotCheck(r, /\.git is not a git work tree/);
+});
+
+test("walkcheck says it cannot check when the base ref shares no history with the head", t => {
+  const s = setup(t);
+  const empty = git(s.wt, "hash-object", "-t", "tree", os.devNull).trim();
+  const unrelated = git(s.wt, "commit-tree", empty, "-m", "unrelated").trim();
+  git(s.wt, "update-ref", "refs/remotes/origin/unrelated", unrelated);
+  const r = walkcheck(s, s.data, "origin/unrelated");
+  assertCannotCheck(r, /git diff failed/);
+});
+
+test("walkcheck still reports a flow file that does not exist at the head as a problem", t => {
+  const s = setup(t);
+  s.data.flow[0].file = "ghost.js";
+  const r = walkcheck(s, s.data);
+  assert.strictEqual(r.code, 1);
+  assert.match(r.out, /flow: ghost\.js:2 — the file does not exist at the head/);
+  assert.ok(!/cannot check/.test(r.out));
+  assert.ok(!fs.existsSync(r.diff));
+});

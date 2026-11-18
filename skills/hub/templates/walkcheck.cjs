@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Checks a walkthrough data file against the worker's committed head, before anyone shows it to the developer.
    Usage: node <hub>/walkcheck.cjs <hub>/walkthroughs/<id>-w<n>.js <worktree path> origin/<base>
-   Exit 1: it prints one line per problem in the walkthrough. Exit 0: it prints "ok". Exit 2: the check could not run (usage error, or the
+   Exit 1: it prints one line per problem in the walkthrough. Exit 0: it prints "ok". Exit 2: the check could not run (wrong arguments, or the
    data file, the worktree path, or the base ref is unusable): it prints one line "cannot check: <reason>" and writes nothing. That line is
    about how it was run, not about the walkthrough. It never changes the worktree.
    On "ok" it also writes <id>-w<n>.diff.js beside the data file: the per-file diff the page shows, taken from git. */
@@ -10,9 +10,9 @@ const fs = require("fs");
 const { execFileSync } = require("child_process");
 
 const [file, wt, base] = process.argv.slice(2);
-if (!file || !wt || !base) { console.log("usage: walkcheck.cjs <data.js> <worktree> origin/<base>"); process.exit(2); }
-const problems = [];
 const cannot = why => { console.log(`cannot check: ${why}`); process.exit(2); };
+if (!file || !wt || !base) cannot("usage: walkcheck.cjs <data.js> <worktree> origin/<base>");
+const problems = [];
 const run = (...a) => execFileSync("git", ["-c", "core.quotePath=false", "-C", wt, ...a], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 // A git command that fails here is not a problem in the walkthrough: the check cannot be made.
 const git = (...a) => {
@@ -22,7 +22,9 @@ const git = (...a) => {
 // 0. The check can run: the data file is readable, the path is a git worktree, and the base ref is a commit.
 let text = "";
 try { text = fs.readFileSync(file, "utf8"); } catch (e) { cannot(`the data file ${file} ${e.code === "ENOENT" ? "does not exist" : `cannot be read (${e.code || e.message})`}`); }
-try { run("rev-parse", "--is-inside-work-tree"); } catch { cannot(`${wt} is not a git worktree (or does not exist)`); }
+let inside = "";
+try { inside = run("rev-parse", "--is-inside-work-tree").trim(); } catch { /* not a repo: reported below */ }
+if (inside !== "true") cannot(`${wt} is not a git work tree (or does not exist)`);
 try { run("rev-parse", "--verify", "--quiet", `${base}^{commit}`); } catch { cannot(`the base ref ${base} does not resolve to a commit in ${wt}: run git fetch origin, or check the ref`); }
 
 // 1. Plain data only: the page runs this file as a script, so anything but JSON could execute.
