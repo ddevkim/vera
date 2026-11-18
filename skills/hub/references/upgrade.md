@@ -18,7 +18,7 @@ Korean strings in this file are examples for a Korean-speaking developer: write 
 
 The older layout walked the developer through the code first and reviewed it after the PR opened. Now the review comes first, the walkthrough stays linked from the dashboard, and changes after the approval get a new walkthrough round.
 
-1. **Templates.** Copy `dashboard.html`, `sync.cjs`, `walkthrough.html`, and `walkcheck.cjs` from this skill's `templates/` over the old ones (they are never edited, so nothing is lost; stop a running sync first: `kill "$(cat <hub>/sync.pid)"`). `mkdir -p <hub>/walkthroughs <hub>/reviews`. Older walkthrough files still open in the new page; a step whose data they lack says so.
+1. **Templates.** Copy `dashboard.html`, `sync.cjs`, `walkthrough.html`, `walkcheck.cjs`, and `diffhash.cjs` from this skill's `templates/` over the old ones (they are never edited, so nothing is lost; stop a running sync first: `kill "$(cat <hub>/sync.pid)"`). `mkdir -p <hub>/walkthroughs <hub>/reviews`. Older walkthrough files still open in the new page; a step whose data they lack says so.
 2. **state.js.** Add `v: 2`. For each item:
    - `phases`, from the old order (… verified 3, walkthrough approved 4, pr-open 5, ci-green 6, reviewed 7, merged 8) to the new one (… verified 3, reviewed 4, walkthrough approved 5, pr-open 6, ci-green 7, merged 8): 0-3, 7, and 8 stay; old 4 becomes 5, old 5 becomes 6, old 6 becomes 7. An item moved this way (old 4, 5, or 6) passed the review's place without a review: set `reviewPending: true` (the dashboard marks the review box late and holds its merge approval).
    - An item whose walkthrough was approved: set `walkApproved` to its `walkthrough`.
