@@ -307,6 +307,8 @@ test("the hub is told to read the whole skill again after a compaction, in the p
   assert.match(paragraph, /`state\.js`/, "the paragraph does not name state.js");
   assert.match(paragraph, /`lastMsgId`/, "the paragraph does not name lastMsgId");
   assert.match(paragraph, /this skill's folder/, "the paragraph does not say where to read the file from");
-  // 5,000 tokens at 3 characters per token, a conservative bound.
-  assert.ok(loop > 15000, `the Loop heading starts at ${loop}, inside the part a compaction keeps: the compaction note can be reconsidered`);
+  assert.match(paragraph, /\breview\b/, "the paragraph does not mention the review");
+  assert.match(paragraph, /do not restart|not restart/i, "the paragraph does not tell the hub to leave a running review alone");
+  // 5,000 tokens at up to 4.5 characters per token (plain English): the safe bound is the larger one.
+  assert.ok(loop > 22500, `the Loop heading starts at ${loop}, within 22,500 characters (5,000 tokens at 4.5 characters per token), so a compaction may keep it: the compaction note can be reconsidered`);
 });
