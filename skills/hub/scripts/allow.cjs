@@ -14,8 +14,9 @@ const { spawnSync } = require("node:child_process");
 
 // Claude Code rule syntax (code.claude.com/docs/en/permissions, verified on 2.1.323). A rule without `*`
 // matches one exact command, so only the three pushes the protocol uses run without a prompt; every other
-// push asks, and the deny list refuses a plain force push as a second layer. Ask outranks allow, so an rm
-// that may leave the worktree, or a gh pr create aimed at another repo (--repo, -R with or without a
+// push asks, and the deny list refuses a plain force push as a second layer. It also refuses gh pr merge,
+// bare or with anything after it, because the hub runs every merge. Ask outranks allow, so an rm that may
+// leave the worktree, or a gh pr create aimed at another repo (--repo, -R with or without a
 // space; --base stays allowed for stacked PRs), still prompts. Rules match command text: a best-effort
 // limit, not a boundary.
 const RULES = {
@@ -26,7 +27,8 @@ const RULES = {
     "Bash(gh pr create --repo *)", "Bash(gh pr create * --repo *)", "Bash(gh pr create --repo=*)",
     "Bash(gh pr create * --repo=*)", "Bash(gh pr create -R*)", "Bash(gh pr create * -R*)"],
   deny: ["Bash(git push --force *)", "Bash(git push * --force)", "Bash(git push * --force *)",
-    "Bash(git push -f *)", "Bash(git push * -f)", "Bash(git push * -f *)", "Bash(git push * +*)"],
+    "Bash(git push -f *)", "Bash(git push * -f)", "Bash(git push * -f *)", "Bash(git push * +*)",
+    "Bash(gh pr merge)", "Bash(gh pr merge *)"],
 };
 // Codex prefix_rule syntax (developers.openai.com/codex/rules, measured on Codex CLI 0.166.0): a rule
 // matches a command whose argument list starts with its pattern, each position a literal or a list of

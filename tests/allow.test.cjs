@@ -331,6 +331,62 @@ test("a gh pr create to another repo asks, and --base still runs", () => {
   for (const cmd of ["gh pr create --base feat/a --title t", "gh pr create --title t --body b"]) assert.ok(allowed(cmd), `${cmd} is no longer pre-allowed`);
 });
 
+const MERGE_DENY = ["Bash(gh pr merge)", "Bash(gh pr merge *)"];
+
+test("a gh pr merge is denied in every form, and the gh commands a worker uses still run", () => {
+  const l = lab();
+  assert.strictEqual(l.run("write", l.wt, "medium").code, 0);
+  const p = JSON.parse(fs.readFileSync(l.file, "utf8")).permissions;
+  for (const r of MERGE_DENY) assert.ok(p.deny.includes(r), `deny lacks ${r}`);
+  const denied = (cmd) => p.deny.some((r) => matches(r, cmd));
+  const allowed = (cmd) => p.allow.some((r) => matches(r, cmd)) && ![...p.ask, ...p.deny].some((r) => matches(r, cmd));
+  for (const cmd of ["gh pr merge 12", "gh pr merge 12 --squash", "gh pr merge --admin 12", "gh pr merge"])
+    assert.ok(denied(cmd), `not denied: ${cmd}`);
+  assert.ok(allowed("gh pr create --base feat/a --title t"), "gh pr create --base is no longer pre-allowed");
+  for (const cmd of ["gh pr view 12", "gh pr checks 12 --watch"])
+    assert.ok(![...p.allow, ...p.ask, ...p.deny].some((r) => matches(r, cmd)), `a rule matches ${cmd}`);
+});
+
+test("the gh pr merge deny rules are written at medium and high and not at low", () => {
+  for (const level of ["medium", "high"]) {
+    const l = lab();
+    assert.strictEqual(l.run("write", l.wt, level).code, 0);
+    const { deny } = JSON.parse(fs.readFileSync(l.file, "utf8")).permissions;
+    for (const r of MERGE_DENY) assert.ok(deny.includes(r), `${level} lacks ${r}`);
+  }
+  const l = lab();
+  assert.strictEqual(l.run("write", l.wt, "low").code, 0);
+  assert.ok(!fs.existsSync(l.file), "low wrote Claude rules");
+});
+
+test("a worktree written before the gh pr merge deny rules still removes, checks and changes level cleanly", () => {
+  for (const next of [["remove"], ["write", "low"], ["write", "high"]]) {
+    const l = lab();
+    const record = path.join(l.wt, ".git", "vera-hub-allow.json");
+    const before = snapshot(l.wt, (p) => p.endsWith(".git"));
+    assert.strictEqual(l.run("write", l.wt, "medium").code, 0);
+    // Rewrite file and record as the previous version made them: the same rules without the merge denies.
+    const strip = (list) => list.filter((r) => !MERGE_DENY.includes(r));
+    const settings = JSON.parse(fs.readFileSync(l.file, "utf8"));
+    settings.permissions.deny = strip(settings.permissions.deny);
+    const rec = JSON.parse(fs.readFileSync(record, "utf8"));
+    rec.claude.added.deny = strip(rec.claude.added.deny);
+    rec.claude.written = JSON.stringify(settings, null, 2) + "\n";
+    fs.writeFileSync(l.file, rec.claude.written);
+    fs.writeFileSync(record, JSON.stringify(rec, null, 2) + "\n");
+    assert.notStrictEqual(l.run("check", l.wt).code, 0, "check passed while the old rules exist");
+    const r = l.run(next[0], l.wt, ...next.slice(1));
+    assert.strictEqual(r.code, 0, `${next.join(" ")}: ${r.out}`);
+    if (next[0] === "write" && next[1] === "high") {
+      const { deny } = JSON.parse(fs.readFileSync(l.file, "utf8")).permissions;
+      for (const m of MERGE_DENY) assert.ok(deny.includes(m), `a level change did not add ${m}`);
+      assert.strictEqual(l.run("remove", l.wt).code, 0);
+    }
+    assert.deepStrictEqual(snapshot(l.wt, (p) => p.endsWith(".git")), before, next.join(" "));
+    assert.strictEqual(l.run("check", l.wt).code, 0, next.join(" "));
+  }
+});
+
 // A model of Codex's prefix_rule matching (not its real matcher): each pattern position is a literal or a list of
 // alternatives, a rule matches any command that starts with its pattern, and the most restrictive decision wins.
 const RANK = { allow: 1, prompt: 2, forbidden: 3 };
