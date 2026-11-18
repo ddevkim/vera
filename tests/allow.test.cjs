@@ -343,7 +343,8 @@ test("a gh pr merge is denied in every form, and the gh commands a worker uses s
   for (const cmd of ["gh pr merge 12", "gh pr merge 12 --squash", "gh pr merge --admin 12", "gh pr merge"])
     assert.ok(denied(cmd), `not denied: ${cmd}`);
   assert.ok(allowed("gh pr create --base feat/a --title t"), "gh pr create --base is no longer pre-allowed");
-  for (const cmd of ["gh pr view 12", "gh pr checks 12 --watch"])
+  for (const cmd of ["gh pr view 12", "gh pr checks 12 --watch", "gh pr comment 12 --body-file r.md", "gh pr edit 12 --base main",
+    "gh pr ready 12 --undo"])
     assert.ok(![...p.allow, ...p.ask, ...p.deny].some((r) => matches(r, cmd)), `a rule matches ${cmd}`);
 });
 

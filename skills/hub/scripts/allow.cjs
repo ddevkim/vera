@@ -15,7 +15,8 @@ const { spawnSync } = require("node:child_process");
 // Claude Code rule syntax (code.claude.com/docs/en/permissions, verified on 2.1.323). A rule without `*`
 // matches one exact command, so only the three pushes the protocol uses run without a prompt; every other
 // push asks, and the deny list refuses a plain force push as a second layer. It also refuses gh pr merge,
-// bare or with anything after it, because the hub runs every merge. Ask outranks allow, so an rm that may
+// bare or with anything after it, because the hub runs every merge (a merge through gh api, a gh alias, or a
+// wrapper such as env X=y gh pr merge is not caught). Ask outranks allow, so an rm that may
 // leave the worktree, or a gh pr create aimed at another repo (--repo, -R with or without a
 // space; --base stays allowed for stacked PRs), still prompts. Rules match command text: a best-effort
 // limit, not a boundary.
