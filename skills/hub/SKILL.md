@@ -20,6 +20,8 @@ Five rules hold for every PR, with no exceptions:
 
 Load the `orchestration` skill first (`orca skills get orchestration`) for command mechanics: waking, `send`/`reply`, escalations, no polling. This skill adds the operating protocol on top.
 
+**After a compaction.** The runtime gives you back only the first part of this file after a compaction: the Loop table and everything after it are not in it, so a summary alone would have you handle the next worker event without them. When your context has been compacted or summarised, read this whole file again from this skill's folder before you handle the next event, then `state.js` and `spec.md` in the hub folder, and reconcile the run's inbox after `lastMsgId` as "Start or resume" step 1 (Resume) does, instead of trusting the summary. A compaction changes what you remember, not the hub folder, the workers, or the sidebar, so this is not a full resume: copy no templates and change nothing else.
+
 ## Is a hub worth it here?
 
 A hub costs a spec, a plan, a worker and worktree per PR, a review and a walkthrough per PR, and the developer's attention on a dashboard. Check this before step 2 of "Start or resume", from the discussion and a quick look at the code:

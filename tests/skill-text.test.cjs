@@ -293,3 +293,20 @@ test("the page owner is the gh login of whoever runs the hub, never the repo own
   assert.match(read(path.join(refDir, "dashboard.md")), /`owner`: the `gh api user -q \.login` of whoever runs the hub/);
   assert.match(read(path.join(refDir, "walkthrough.md")), /owner: "<state\.js owner>"/);
 });
+
+// After an auto-compaction Claude Code re-attaches only the first 5,000 tokens of a skill: https://code.claude.com/docs/en/skills
+test("the hub is told to read the whole skill again after a compaction, in the part a compaction keeps", () => {
+  const skill = read(path.join(skillDir, "SKILL.md"));
+  const at = skill.indexOf("**After a compaction.**");
+  assert.ok(at >= 0, "SKILL.md has no '**After a compaction.**' paragraph");
+  const loop = skill.indexOf("\n## Loop");
+  assert.ok(loop >= 0, "SKILL.md has no '## Loop' heading");
+  assert.ok(at < 4000, `the compaction paragraph starts at ${at}, beyond the first 4,000 characters a compaction keeps`);
+  assert.ok(at < loop, "the compaction paragraph comes after the Loop heading");
+  const paragraph = skill.slice(at).split("\n\n")[0];
+  assert.match(paragraph, /`state\.js`/, "the paragraph does not name state.js");
+  assert.match(paragraph, /`lastMsgId`/, "the paragraph does not name lastMsgId");
+  assert.match(paragraph, /this skill's folder/, "the paragraph does not say where to read the file from");
+  // 5,000 tokens at 3 characters per token, a conservative bound.
+  assert.ok(loop > 15000, `the Loop heading starts at ${loop}, inside the part a compaction keeps: the compaction note can be reconsidered`);
+});
