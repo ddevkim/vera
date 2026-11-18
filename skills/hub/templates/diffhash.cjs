@@ -18,8 +18,8 @@ const { execFileSync } = require("child_process");
 const FLAGS = ["--no-ext-diff", "--no-color", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/",
   "--submodule=short", "--no-textconv", "--diff-algorithm=myers", "--no-relative", "-O/dev/null"];
 const MAX = Number(process.env.DIFFHASH_MAX_BUFFER) || 256 * 1024 * 1024;
-// A reason never carries a full object name, so nothing on stdout can be taken for a hash.
-const fail = reason => { console.log(`cannot hash: ${reason.replace(/\b([0-9a-f]{12})[0-9a-f]{28,}\b/g, "$1")}`); process.exit(2); };
+// A reason never carries 40 hex characters in a row, so nothing on stdout can be taken for a hash.
+const fail = reason => { console.log(`cannot hash: ${reason.replace(/[0-9a-f]{40,}/gi, m => m.slice(0, 12))}`); process.exit(2); };
 const args = process.argv.slice(2);
 if (args.length !== 3 || args.some(a => !a)) fail("usage: node diffhash.cjs <dir> origin/<base> <head>");
 const [dir, base, head] = args;
