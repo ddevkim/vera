@@ -137,6 +137,23 @@ npx skills:
 npx skills remove hub
 ```
 
+## Releasing
+
+For maintainers, and for an agent asked to release. A merge to `main` does not reach anyone's install: Claude Code and Codex keep the plugin in a cache named by its version, so installs stay on the old copy until the version changes.
+
+1. Open a pull request that changes only `version` in `.claude-plugin/plugin.json`, titled `Release X.Y.Z`, and list in its body the pull requests merged since the last release. Use a patch version for fixes and a minor version when the skill gains something (a script, a rule, a place it runs).
+2. Merge it once CI passes, then tag the merge commit and publish the GitHub release, with what changed for a user in its notes:
+
+   ```sh
+   gh release create vX.Y.Z --target <full hash of the merge commit> --title "X.Y.Z" --notes-file <notes.md>
+   ```
+
+   Installs do not read the tag: they read the version in `main`. The tag and the release are the history people see on GitHub. Releases before 0.3.0 have neither.
+3. Update your own installs as in [Update](#update), then check that each one shows the new version (`claude plugin list`, `codex plugin list`):
+   - Claude Code updates one scope per run. With the plugin installed in both, run `claude plugin update vera@vera --scope user` and `claude plugin update vera@vera --scope project`.
+   - Codex: once in each `CODEX_HOME` you use.
+4. A session that was already running keeps the old version until `/reload-plugins` or a restart.
+
 ## License
 
 [MIT](LICENSE)
