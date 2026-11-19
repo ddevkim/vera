@@ -77,12 +77,12 @@ test("README names the three autonomy levels and that the walkthrough page follo
   assert.match(text, /walkthrough page[^.\n]*`lang`|`lang`[^.\n]*walkthrough page/);
 });
 
-test("README tells a maintainer how to release: the version file, the PR title, and the per-scope update", () => {
+test("README tells a maintainer how to release: the version file, the PR title, the tag, and the per-scope update", () => {
   const text = readme();
   const start = text.indexOf("\n## Releasing\n");
   assert.ok(start > 0, "README has no Releasing section");
   const section = text.slice(start, text.indexOf("\n## ", start + 1));
-  for (const needle of [".claude-plugin/plugin.json", "`Release X.Y.Z`", "--scope user", "--scope project", "CODEX_HOME"]) {
+  for (const needle of [".claude-plugin/plugin.json", "`Release X.Y.Z`", "--scope user", "--scope project", "CODEX_HOME", "gh release create vX.Y.Z"]) {
     assert.ok(section.includes(needle), `Releasing section does not mention ${needle}`);
   }
 });
