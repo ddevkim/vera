@@ -387,3 +387,64 @@ test("review.md says what the hash covers and what it cannot see", () => {
   assert.match(text, /What it cannot see: a change moved between two places whose neighbouring lines are the same/);
   assert.doesNotMatch(text, /hashes them as a git blob/);
 });
+
+// What the hash must tell apart. Each pair is two feature branches over the same base; an audit found the first form of
+// this hash gave both of each pair one hash, so the second could replace the first after a review.
+const differ = (name, base, one, two) => test(`the hash tells apart: ${name}`, t => {
+  const a = build(t, base, one), b = build(t, base, two);
+  assert.notStrictEqual(hashOf(a.wt, "origin/main", "HEAD"), hashOf(b.wt, "origin/main", "HEAD"));
+});
+differ("two contents of a binary file", d => put(d, "b.bin", Buffer.from([0, 1, 2, 0])),
+  d => put(d, "b.bin", Buffer.from("x\0reviewed")), d => put(d, "b.bin", Buffer.from("x\0EVIL")));
+differ("two contents of a file a -diff attribute names", d => { put(d, ".gitattributes", "*.txt -diff\n"); put(d, "a.txt", "base\n"); },
+  d => put(d, "a.txt", "SAFE\n"), d => put(d, "a.txt", "rm everything\n"));
+differ("a new file that is executable and one that is not", none,
+  d => put(d, "s.sh", "echo\n"), d => { put(d, "s.sh", "echo\n"); fs.chmodSync(path.join(d, "s.sh"), 0o755); });
+differ("a new symlink and a new file holding its target", none,
+  d => put(d, "link", null, "target"), d => put(d, "link", "target"));
+
+test("the hash tells apart deleting an empty file and adding one", t => {
+  const del = build(t, d => put(d, "e.txt", ""), d => fs.rmSync(path.join(d, "e.txt")));
+  const add = build(t, none, d => put(d, "e.txt", ""));
+  assert.notStrictEqual(hashOf(del.wt, "origin/main", "HEAD"), hashOf(add.wt, "origin/main", "HEAD"));
+});
+
+test("a .gitattributes the PR itself adds cannot hide its other changes", t => {
+  const one = build(t, d => put(d, "a.js", "base\n"), d => { put(d, ".gitattributes", "*.js -diff\n"); put(d, "a.js", "reviewed\n"); });
+  const two = build(t, d => put(d, "a.js", "base\n"), d => { put(d, ".gitattributes", "*.js -diff\n"); put(d, "a.js", "something else\n"); });
+  assert.notStrictEqual(hashOf(one.wt, "origin/main", "HEAD"), hashOf(two.wt, "origin/main", "HEAD"));
+});
+
+test("diff.ignoreSubmodules=all does not hide a gitlink bump", t => {
+  const s = build(t, none, d => put(d, "f.txt", "x\n"));
+  const sub = path.join(s.root, "sub");
+  fs.mkdirSync(sub);
+  git(sub, "init", "-q", "-b", "main");
+  put(sub, "a", "1\n"); git(sub, "add", "."); git(sub, "commit", "-qm", "one");
+  const first = git(sub, "rev-parse", "HEAD").trim();
+  put(sub, "a", "2\n"); git(sub, "commit", "-qam", "two");
+  const second = git(sub, "rev-parse", "HEAD").trim();
+  const withLink = sha => { git(s.wt, "update-index", "--add", "--cacheinfo", `160000,${sha},mod`); git(s.wt, "commit", "-qm", "link"); return hashOf(s.wt, "origin/main", "HEAD"); };
+  const h1 = withLink(first);
+  git(s.wt, "reset", "-q", "--soft", "HEAD~1");
+  const h2 = withLink(second);
+  assert.notStrictEqual(h1, h2);
+  git(s.wt, "config", "diff.ignoreSubmodules", "all");
+  assert.strictEqual(hashOf(s.wt, "origin/main", "HEAD"), h2);
+});
+
+// With one line of context git joins two hunks when two or fewer unchanged lines lie between them, so a base that
+// removes or adds a line between two of the PR's changes moves the hunk boundary without touching either change.
+test("a clean rebase that joins or splits two hunks keeps the hash", t => {
+  const TWELVE = Array.from({ length: 12 }, (_, i) => `row ${i + 1}`);
+  const edit = (lines, ...rows) => lines.map(l => (rows.includes(l) ? `${l} mine` : l)).join("\n") + "\n";
+  for (const [name, baseChange] of [["joins", ls => ls.filter(l => l !== "row 7")], ["splits", ls => ls.flatMap(l => (l === "row 7" ? [l, "new a", "new b"] : [l]))]]) {
+    const s = build(t, d => put(d, "t.txt", TWELVE.join("\n") + "\n"), d => put(d, "t.txt", edit(TWELVE, "row 5", "row 9")));
+    const before = hashOf(s.wt, "origin/main", "HEAD");
+    put(s.origin, "t.txt", baseChange(TWELVE).join("\n") + "\n");
+    git(s.origin, "commit", "-qam", "between the two changes");
+    git(s.wt, "fetch", "-q", "origin");
+    git(s.wt, "rebase", "-q", "origin/main");
+    assert.strictEqual(hashOf(s.wt, "origin/main", "HEAD"), before, `a base change that ${name} the hunks`);
+  }
+});

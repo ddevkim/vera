@@ -61,7 +61,8 @@ const lines = new Map();
 const fileLines = f => {
   if (!lines.has(f)) {
     let src = null;
-    try { src = run("show", `HEAD:${f}`); } catch { src = null; }
+    // A folder also answers `git show HEAD:<path>` (with its listing), so ask for a file first.
+    try { src = run("cat-file", "-t", `HEAD:${f}`).trim() === "blob" ? run("show", `HEAD:${f}`) : null; } catch { src = null; }
     lines.set(f, src === null ? null : src.replace(/\n$/, "").split("\n"));
   }
   return lines.get(f);
