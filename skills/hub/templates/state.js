@@ -20,6 +20,7 @@ window.HUB_STATE = {
   hubOldTitle: "",           // the hub session's title before the hub renamed it: restored at close
   lastMsgAt: "",             // ISO time of the newest worker message handled: sync.cjs marks later ones as not handled yet
   v: 2,                      // layout version: review before walkthrough. A state.js without it is upgraded first (references/upgrade.md)
+  protocolFrom: "",          // what scripts/protocolhash.cjs printed when protocol.md was written (SKILL.md step 5): a resume writes it again when this changes
   autonomy: "low",          // "low" | "medium" | "high": what the hub leaves to the developer (SKILL.md); absent or unknown = "low"
   lang: "ko",                // "ko" or "en": the page's own labels; the hub's sentences follow SKILL.md, "Language"
   closed: false,             // true after the final sweep: sync.cjs exits, the page shows the run as finished
