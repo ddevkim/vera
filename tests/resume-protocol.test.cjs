@@ -119,7 +119,19 @@ test("resume sends a changed protocol before it records it, with the live slots 
 });
 
 test("after a compaction the hub skips the protocol check, but finishes one a compaction cut short", () => {
-  assert.match(skill, /skip the rest of step 1 \(templates, `preflight\.cjs`, sync, sidebar, and the protocol bullet unless `<hub>\/protocol\.new\.md` exists: then do its steps 2 and 3\)/);
+  assert.match(skill, /skip the rest of step 1 \(templates, `preflight\.cjs`, sync, sidebar, the allow list bullet, and the protocol bullet unless `<hub>\/protocol\.new\.md` exists: then do its steps 2 and 3\)/);
+});
+
+// A worktree written by an older version of this skill lacks the rules added since (the gh pr merge refusal). write
+// takes out what the earlier write added before it writes, so running it again at the same level brings them up to date.
+test("resume writes each live worker's allow list again", () => {
+  const m = skill.match(/\n {3}\*\*Resume\*\* an existing hub:\n([\s\S]*?)\n2\. \*\*Read the repo/);
+  const lines = m[1].split("\n");
+  const bullet = lines.find(l => l.startsWith("   - Allow list"));
+  assert.ok(bullet, "Resume has no allow list bullet");
+  assert.ok(lines.indexOf(bullet) > lines.findIndex(l => l.includes("orca orchestration worker-list")), "it follows the worker list reconcile");
+  assert.match(bullet, /At `medium` or `high`, run `allow\.cjs write <its path> <level>` again for each live worker/);
+  assert.match(bullet, /`not written:`/);
 });
 
 test("protocol.md keeps the live autonomy level and hub session", () => {
