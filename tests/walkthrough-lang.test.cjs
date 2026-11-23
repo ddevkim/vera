@@ -194,3 +194,17 @@ test("changing only lang in state.js redraws the open page", async () => {
   assert.strictEqual(r.lang, "en");
   assert.strictEqual(r.title, "A4 walkthrough round 2");
 });
+
+test("a round number far beyond any real one does not make the page draw a link per round", async () => {
+  const r = await render(current(), { ...at([{ ...FULL, round: 5000 }], [DIFF], [{ ...lane("walk", { walkthrough: "A4-w900000000" }), lang: "en" }]), hash: 1 });
+  const links = r.html.match(/walkthrough\.html\?w=A4-w\d+/g) || [];
+  assert.ok(links.length > 0 && links.length <= 100, `${links.length} links to a round`); // 99 rounds and the link to the latest one
+});
+
+test("a diff file whose lines are not a list still renders the step", async () => {
+  const bad = { ...DIFF, files: [{ path: "src/night.js", lines: "@@ -1 +1 @@" }] };
+  for (let hash = 1; hash <= 7; hash++) {
+    const r = await render(current(), { ...at([FULL], [bad], [{ ...lane("walk", { walkthrough: ID }), lang: "en" }]), hash });
+    assert.match(r.html, /class="meta"/, `step ${hash} did not render`);
+  }
+});
