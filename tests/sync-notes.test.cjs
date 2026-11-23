@@ -90,3 +90,25 @@ test("a message from a worker's follow-up dispatch counts for its item, by the w
   assert.strictEqual(out.items.W1.count, 1);
   assert.strictEqual(out.notes.W1.text, "고쳤습니다");
 });
+
+// A rebase notice sent to N2's worker is titled after its parent: "N1: merged, rebase onto main". The follow-up
+// dispatch's task then names N1, while its worktree is N2's.
+test("a follow-up dispatch whose task title names another item still counts for its own worktree's item", () => {
+  const S = { lastMsgId: "", workers: [{ item: "N1", dispatch: "ctx_n1", path: "/w/n1", tone: "done" }, { item: "N2", dispatch: "ctx_n2", path: "/w/n2", tone: "support" }] };
+  const workerList = { result: { workers: [null, { dispatchId: "ctx_new", taskId: "task_new", state: "ready", workspace: "r::/w/n2" }] } };
+  const taskList = { result: { tasks: [{ id: "task_new", title: "N1: merged, rebase onto main" }, "junk"] } };
+  const inbox = { result: { messages: [null, { id: "m1", sequence: 1, type: "status", subject: "N2: green", body: "SUMMARY: 통과", created_at: "t1",
+    payload: JSON.stringify({ dispatchId: "ctx_new", taskId: "task_new", phase: "green" }) }] } };
+  const ids = new Set(["N1", "N2"]);
+  const sync = require(SYNC);
+  assert.deepStrictEqual(sync.discover(S, workerList, taskList, ids), {}, "the follow-up dispatch is not a new worker");
+  const out = sync.pending(S, inbox, workerList, taskList, ids, {});
+  assert.deepStrictEqual(Object.keys(out.items), ["N2"]);
+  assert.strictEqual(out.items.N2.phase, "green");
+});
+
+test("pending says more may be waiting when the fetched window is full, whatever the message types", () => {
+  const messages = Array.from({ length: 60 }, (_, i) => ({ id: `m${i}`, sequence: i + 1, type: i % 2 ? "status" : "dispatch", subject: "x", body: "", created_at: "t" }));
+  const out = require(SYNC).pending({ lastMsgId: "gone", workers: [] }, { result: { messages } }, { result: { workers: [] } }, { result: { tasks: [] } }, new Set(), {});
+  assert.strictEqual(out.more, true);
+});
