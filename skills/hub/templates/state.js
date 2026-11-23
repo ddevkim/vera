@@ -21,6 +21,7 @@ window.HUB_STATE = {
   lastMsgAt: "",             // ISO time of the newest worker message handled: sync.cjs marks later ones as not handled yet
   v: 2,                      // layout version: review before walkthrough. A state.js without it is upgraded first (references/upgrade.md)
   protocolFrom: "",          // what scripts/protocolhash.cjs printed when protocol.md was written (SKILL.md step 5): a resume writes it again when this changes
+  hashForm: 2,               // the form of reviewedDiff and walkDiff: 2 = templates/diffhash.cjs with the neighbouring lines. A state.js without it holds older hashes: a resume converts them (SKILL.md, "Resume")
   autonomy: "low",          // "low" | "medium" | "high": what the hub leaves to the developer (SKILL.md); absent or unknown = "low"
   lang: "ko",                // "ko" or "en": the page's own labels; the hub's sentences follow SKILL.md, "Language"
   closed: false,             // true after the final sweep: sync.cjs exits, the page shows the run as finished

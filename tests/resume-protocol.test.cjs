@@ -119,7 +119,7 @@ test("resume sends a changed protocol before it records it, with the live slots 
 });
 
 test("after a compaction the hub skips the protocol check, but finishes one a compaction cut short", () => {
-  assert.match(skill, /skip the rest of step 1 \(templates, `preflight\.cjs`, sync, sidebar, the allow list bullet, and the protocol bullet unless `<hub>\/protocol\.new\.md` exists: then do its steps 2 and 3\)/);
+  assert.match(skill, /skip the rest of step 1 \(templates, `preflight\.cjs`, sync, sidebar, the hash form and allow list bullets, and the protocol bullet unless `<hub>\/protocol\.new\.md` exists: then do its steps 2 and 3\)/);
 });
 
 // A worktree written by an older version of this skill lacks the rules added since (the gh pr merge refusal). write
