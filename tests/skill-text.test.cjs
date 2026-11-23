@@ -314,3 +314,15 @@ test("the hub is told to read the whole skill again after a compaction, in the p
   // 5,000 tokens at up to 4.5 characters per token (plain English): the safe bound is the larger one.
   assert.ok(loop > 22500, `the Loop heading starts at ${loop}, within 22,500 characters (5,000 tokens at 4.5 characters per token), so a compaction may keep it: the compaction note can be reconsidered`);
 });
+
+// "Approve, but rename it" is the answer a hub most easily reads as a plain approval: it merges and the comment is lost.
+test("an approval that carries a comment is read by what the comment asks for", () => {
+  const merging = fs.readFileSync(path.join(__dirname, "..", "skills", "hub", "references", "merging.md"), "utf8");
+  const walk = fs.readFileSync(path.join(__dirname, "..", "skills", "hub", "references", "walkthrough.md"), "utf8");
+  const approval = merging.slice(merging.indexOf("## Approval"), merging.indexOf("## At High"));
+  assert.match(approval, /An approval that carries a comment[^\n]*the comment is never dropped/);
+  assert.match(approval, /or you cannot tell whether they mean now or later: it is not an approval/);
+  assert.match(approval, /Work for later[^\n]*the approval counts\. Log the comment in their words and list it under follow-ups/);
+  assert.match(approval, /A question: answer it from the code, then ask for the approval again/);
+  assert.match(walk, /An approval that carries a comment is read as in \[merging\.md\]\(merging\.md\), "Approval": a change they want now is \*\*Changes\*\* below, not \*\*Approved\*\*/);
+});

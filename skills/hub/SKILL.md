@@ -185,6 +185,7 @@ After every event:
 | Planning items straight from the chat, or filling a spec gap with a guess | Write `spec.md` first, confirm its summary, put guesses under open questions |
 | Letting a worker push or open a PR before the developer approved its walkthrough, or reading "좋네요" as approval | Rule 6 holds the push; only an explicit approval of that item counts (walkthrough.md) |
 | A walkthrough that summarises instead of showing code, or that you did not check against the worktree | Steps with `file:line` and excerpts, checked before you show it |
+| Merging or opening a PR on "승인, 근데 이름은 바꿔줘" and dropping the comment | Read what the comment asks for: a change now is not an approval, later work becomes a follow-up (merging.md, "Approval") |
 | Telling the developer about a post-approval change only in chat, or leaving it out of the merge approval | The worker writes a new walkthrough round; link it and list its `changes` (walkthrough.md, "Changes after the approval") |
 | Reviewing the code yourself or asking its worker to | A fresh reviewer that never saw the code |
 | `gh pr merge --delete-branch` | Merge without it; branches go in the cleanup |

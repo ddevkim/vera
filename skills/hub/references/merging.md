@@ -29,6 +29,12 @@ The approval message leads with the PR link and the walkthrough link (`file://<h
 
 Only an explicit approval that names the items counts: "W1 병합해", choosing W1 in a question, or "다 병합해" (merge all) in answer to a message that listed the items; the same intent in any language counts. "다 병합해" covers exactly the items listed in the approval message it answers, never an item that became ready after it. "좋네요", silence, or approval given before the preflight facts were shown is not approval: ask. An item whose hash changed after the approval (an `update-branch` that touched its own lines, a new review fix), or that gained a walkthrough round the approval message did not list, needs a new approval.
 
+An approval that carries a comment ("W1 병합해, 근데 함수 이름은 바꿔줘") is read by what the comment asks for, and the comment is never dropped:
+
+- A change to this PR before it merges, or you cannot tell whether they mean now or later: it is not an approval. `send` the change to the worker; the changed lines get a walkthrough round and a review ([walkthrough.md](walkthrough.md), "Changes after the approval"), and you ask again.
+- Work for later ("다음 PR에서", "나중에"): the approval counts. Log the comment in their words and list it under follow-ups in the final report ([cleanup.md](cleanup.md)).
+- A question: answer it from the code, then ask for the approval again.
+
 ## At High
 
 At `high` ([SKILL.md](../SKILL.md), "Autonomy levels") check the stop list first: a hit becomes a to-do with its reason, and nothing below runs for that item. Otherwise the preflight passing on green CI is the approval: merge as below without asking, log it, then run the deploy steps the repo documents (its rule documents or a deploy document the spec names), checking the stop list before each; never invent a step. The developer reads about it in the final report.

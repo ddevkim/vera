@@ -96,7 +96,7 @@ The developer may ask as many questions as they need, in any order, before the a
 - Append each answer you gave yourself to `qa` (`{ q, a, refs }`; the worker appends its own): in a `node - <<'QA'` heredoc as in the template, load the file, push the entry, write it back with `JSON.stringify`. The open page shows it within 5 s, under 질의응답, so the record stays with the walkthrough.
 - A question that turns out to be a product decision goes through the decision flow (SKILL.md, `question` row); one that reveals a defect becomes a change request.
 
-After answering, ask the same four-way question again. Approval comes only from an explicit answer about this item ("PR 올려", "승인", choosing that option, or the same intent in any language). "좋네요", silence, or approval of a different item is not approval: ask.
+After answering, ask the same four-way question again. Approval comes only from an explicit answer about this item ("PR 올려", "승인", choosing that option, or the same intent in any language). "좋네요", silence, or approval of a different item is not approval: ask. An approval that carries a comment is read as in [merging.md](merging.md), "Approval": a change they want now is **Changes** below, not **Approved**; work for later is logged as a follow-up and the approval counts; a question is answered first.
 
 ## The answer
 
