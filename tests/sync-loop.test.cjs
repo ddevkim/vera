@@ -30,8 +30,8 @@ function hub(t) {
   fs.writeFileSync(path.join(dir, "state.js"), STATE(false));
   fs.mkdirSync(path.join(dir, "transcripts"));
   t.after(() => { for (const k of kids) { try { k.kill("SIGKILL"); } catch {} } fs.rmSync(dir, { recursive: true, force: true }); });
-  const start = () => {
-    const k = spawn(process.execPath, [path.join(dir, "sync.cjs")], { env: { ...process.env, VERA_CYCLE_MS: "100", VERA_TRANSCRIPTS: path.join(dir, "transcripts") } });
+  const start = (cycle = "100") => {
+    const k = spawn(process.execPath, [path.join(dir, "sync.cjs")], { env: { ...process.env, VERA_CYCLE_MS: cycle, VERA_TRANSCRIPTS: path.join(dir, "transcripts") } });
     k.out = "";
     k.stdout.on("data", d => { k.out += d; });
     k.stderr.on("data", d => { k.out += d; });
@@ -87,12 +87,12 @@ test("a sync that no longer owns sync.pid exits and leaves the file to its owner
 
 test("the sync keeps running when state.js is missing for a moment, and exits when it stays missing", { timeout: 30000 }, async t => {
   const h = hub(t);
-  const k = h.start();
+  const k = h.start("250"); // it leaves after 4 cycles (1 s) without state.js: room for a slow machine
   await until("the first cycle", () => fs.existsSync(path.join(h.dir, "live.js")));
   fs.rmSync(path.join(h.dir, "state.js"));
-  await sleep(150); // at least one cycle sees no state.js
+  await sleep(350); // at least one cycle sees no state.js
   fs.writeFileSync(path.join(h.dir, "state.js"), STATE(false));
-  await sleep(700);
+  await sleep(1300);
   assert.strictEqual(k.code, undefined, `the sync exited after a moment without state.js: ${k.out}`);
   fs.rmSync(path.join(h.dir, "state.js"));
   assert.strictEqual(await k.done, 0);
@@ -129,4 +129,31 @@ test("the page server gives only this machine the hub folder's own pages", { tim
   assert.strictEqual((await get(port, "/%2e%2e/%2e%2e/etc/hosts")).status, 404);
   assert.strictEqual((await get(port, "/link.js")).status, 404, "a link to a file outside the hub folder");
   assert.strictEqual((await get(port, "/linkdir/secret.js")).status, 404, "a link to a folder outside the hub folder");
+});
+
+test("--stop ends this hub's sync and leaves a pid that is not a sync alone", { timeout: 30000 }, async t => {
+  const h = hub(t);
+  const stop = () => require("node:child_process").execFileSync(process.execPath, [path.join(h.dir, "sync.cjs"), "--stop"], { encoding: "utf8" });
+  const k = h.start();
+  await until("the sync to write sync.pid", () => h.pid() === k.pid);
+  assert.match(stop(), /stopped sync/);
+  assert.strictEqual(await k.done, 0);
+  assert.strictEqual(h.pid(), 0, "the stopped sync removed sync.pid");
+
+  const other = h.other();
+  let gone = false;
+  other.on("exit", () => { gone = true; });
+  fs.writeFileSync(path.join(h.dir, "sync.pid"), String(other.pid));
+  assert.match(stop(), /no sync running/);
+  await sleep(200);
+  assert.strictEqual(gone, false, "--stop ended a program that is not a sync");
+});
+
+test("a sync.pid that names another hub's sync does not stop this hub's sync from starting", { timeout: 30000 }, async t => {
+  const a = hub(t), b = hub(t);
+  const kb = b.start();
+  await until("the other hub's sync", () => b.pid() === kb.pid);
+  fs.writeFileSync(path.join(a.dir, "sync.pid"), String(kb.pid));
+  const ka = a.start();
+  await until("this hub's sync to take sync.pid", () => a.pid() === ka.pid);
 });

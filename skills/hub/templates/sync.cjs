@@ -13,7 +13,8 @@
 
    node <hub>/sync.cjs          loop (one instance per hub folder, guarded by sync.pid); it exits by itself once state.js has closed: true,
                                 state.js has been missing for 4 cycles, or sync.pid names another process
-   node <hub>/sync.cjs --once   one cycle, no lock */
+   node <hub>/sync.cjs --once   one cycle, no lock
+   node <hub>/sync.cjs --stop   stop the running loop, when sync.pid names one */
 "use strict";
 const fs = require("fs");
 const os = require("os");
@@ -325,13 +326,16 @@ function serve() {
     // The real path, so a link inside the hub folder cannot serve a file outside it.
     let file = null;
     try { file = fs.realpathSync(path.resolve(HUB, rel)); } catch {}
-    if (!type || !file || !file.startsWith(root + path.sep) || !fs.statSync(file).isFile()) { res.writeHead(404).end(); return; }
+    let isFile = false;
+    try { isFile = !!file && file.startsWith(root + path.sep) && fs.statSync(file).isFile(); } catch {}
+    if (!type || !isFile) { res.writeHead(404).end(); return; }
     res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
-    fs.createReadStream(file).pipe(res);
+    fs.createReadStream(file).on("error", () => res.destroy()).pipe(res); // a file removed or unreadable mid-request must not end the sync
   });
   server.on("error", e => console.error(new Date().toISOString(), "server:", e.message));
   server.listen(Number(process.env.VERA_PORT) || 0, "127.0.0.1", () => {
-    fs.writeFileSync(PORT, String(server.address().port));
+    myPort = String(server.address().port);
+    fs.writeFileSync(PORT, myPort);
     console.log(`serving http://127.0.0.1:${server.address().port}/dashboard.html`);
   });
 }
@@ -359,7 +363,7 @@ function writeLive(live) {
   fs.renameSync(tmp, LIVE); // atomic: the page never reads half a file
 }
 
-let prev = { workers: {}, prs: {}, discovered: {}, hub: null }, cycle = 0, serving = false;
+let prev = { workers: {}, prs: {}, discovered: {}, hub: null }, cycle = 0, serving = false, myPort = "";
 async function syncOnce(withGh) {
   const started = Date.now(), errors = [];
   let S;
@@ -395,8 +399,11 @@ function alive(pid) { try { process.kill(pid, 0); return true; } catch (e) { ret
 // Without a ps to ask (or when it fails), a live pid counts as the sync, as before.
 function isSync(pid) {
   if (!alive(pid)) return false;
-  try { return /sync\.cjs/.test(execFileSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8", timeout: 5000 })); }
+  let cmd;
+  try { cmd = execFileSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8", timeout: 5000 }); }
   catch { return true; }
+  // This hub's own copy, or one started with a relative path. Another hub's sync (an absolute path to another folder) is not this one.
+  return cmd.includes(path.join(HUB, "sync.cjs")) || /(^|\s)(\.\/)?sync\.cjs(\s|$)/.test(cmd);
 }
 const ownsPid = () => { try { return fs.readFileSync(PID, "utf8").trim() === String(process.pid); } catch { return false; } };
 
@@ -404,6 +411,11 @@ if (require.main !== module) {
   module.exports = { notes, pending, discover, parseVera, appPending, transcriptOf, readTranscript }; // loaded by tests: export the pure functions, start nothing
 } else if (process.argv.includes("--once")) {
   syncOnce(true).then(() => process.exit(0));
+} else if (process.argv.includes("--stop")) {
+  // Stops this hub's running sync. A bare kill of the pid in sync.pid could end another program that got the pid after a reboot.
+  const other = fs.existsSync(PID) ? Number(fs.readFileSync(PID, "utf8").trim()) : 0;
+  if (other && isSync(other)) { process.kill(other, "SIGTERM"); console.log(`stopped sync (pid ${other})`); }
+  else console.log("no sync running");
 } else {
   const other = fs.existsSync(PID) ? Number(fs.readFileSync(PID, "utf8").trim()) : 0;
   if (other && other !== process.pid && isSync(other)) {
@@ -418,7 +430,10 @@ if (require.main !== module) {
   // One cycle at a time: the next starts CYCLE_MS after this one started, or right away when it ran longer.
   const loop = async () => {
     const t = Date.now();
-    if (!ownsPid()) process.exit(0); // another sync started at the same moment and wrote sync.pid last: it runs, this one leaves
+    if (!ownsPid()) { // another sync started at the same moment and wrote sync.pid last: it runs, this one leaves
+      try { if (myPort && fs.readFileSync(PORT, "utf8").trim() === myPort) fs.rmSync(PORT, { force: true }); } catch {} // only its own port
+      process.exit(0);
+    }
     // The hub folder was removed. One cycle without state.js is the hub rewriting it, so wait a few before leaving.
     missing = fs.existsSync(STATE) ? 0 : missing + 1;
     if (missing >= MISSING_CYCLES) stop();
