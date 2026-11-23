@@ -75,6 +75,9 @@ function itemOfTitle(title, ids) {
   return m && ids.has(m[1]) ? m[1] : null;
 }
 
+// The worktree path in a worker-list row's workspace ("<repo id>::<path>").
+const pathOf = (workspace) => { const ws = String(workspace || ""); return ws.includes("::") ? ws.slice(ws.indexOf("::") + 2) : null; };
+
 // Workers the hub started but has not recorded in state.js yet, from the Run's worker list.
 function discover(S, workerList, taskList, ids) {
   const known = new Set(arr(S.workers).map(w => w.dispatch).filter(Boolean));
@@ -84,8 +87,7 @@ function discover(S, workerList, taskList, ids) {
     if (known.has(w.dispatchId) || ["succeeded", "failed", "stopped", "abandoned", "released"].includes(w.state)) continue;
     const item = itemOfTitle(titleOf.get(w.taskId), ids);
     if (!item || arr(S.workers).some(x => x.item === item && x.tone !== "done")) continue;
-    const ws = String(w.workspace || "");
-    out[item] = { dispatch: w.dispatchId, path: ws.includes("::") ? ws.slice(ws.indexOf("::") + 2) : null, state: w.state };
+    out[item] = { dispatch: w.dispatchId, path: pathOf(w.workspace), state: w.state };
   }
   return out;
 }
@@ -115,7 +117,11 @@ function pending(S, inbox, workerList, taskList, ids, discovered) {
   const after = last ? last.sequence : -Infinity;
   const fresh = msgs.filter(m => m.sequence > after);
   const titleOf = new Map(arr(result(taskList).tasks).map(t => [t.id, t.title]));
+  // `send` to a worker that already reported, or was stopped, continues it under a new dispatch id whose task is titled
+  // after the message, not the item. Its worktree still names the item, so the path comes first and the rest override it.
+  const itemOfPath = new Map(arr(S.workers).filter(w => w.path).map(w => [w.path, w.item]));
   const itemOfDispatch = new Map([
+    ...arr(result(workerList).workers).map(w => [w.dispatchId, itemOfPath.get(pathOf(w.workspace))]).filter(([, i]) => i),
     ...arr(S.workers).filter(w => w.dispatch).map(w => [w.dispatch, w.item]),
     ...Object.entries(discovered).map(([item, d]) => [d.dispatch, item]),
     ...arr(result(workerList).workers).map(w => [w.dispatchId, itemOfTitle(titleOf.get(w.taskId), ids)]).filter(([, i]) => i)
@@ -379,7 +385,7 @@ async function syncOnce(withGh) {
 function alive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; } }
 
 if (require.main !== module) {
-  module.exports = { notes, parseVera, appPending, transcriptOf, readTranscript }; // loaded by tests: export the pure functions, start nothing
+  module.exports = { notes, pending, parseVera, appPending, transcriptOf, readTranscript }; // loaded by tests: export the pure functions, start nothing
 } else if (process.argv.includes("--once")) {
   syncOnce(true).then(() => process.exit(0));
 } else {
