@@ -31,6 +31,7 @@ const oneLine = (s, n) => String(s ?? "").split("\n")[0].replace(/\s+/g, " ").tr
 const flat = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const iso = ms => (Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : null);
 const arr = x => Array.isArray(x) ? x : [];
+const rows = x => arr(x).filter(e => e && typeof e === "object"); // a list from a CLI: one bad entry must not stop the cycle
 
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
@@ -81,10 +82,12 @@ const pathOf = (workspace) => { const ws = String(workspace || ""); return ws.in
 // Workers the hub started but has not recorded in state.js yet, from the Run's worker list.
 function discover(S, workerList, taskList, ids) {
   const known = new Set(arr(S.workers).map(w => w.dispatch).filter(Boolean));
-  const titleOf = new Map(arr(result(taskList).tasks).map(t => [t.id, t.title]));
+  const paths = new Set(arr(S.workers).map(w => w.path).filter(Boolean));
+  const titleOf = new Map(rows(result(taskList).tasks).map(t => [t.id, t.title]));
   const out = {};
-  for (const w of arr(result(workerList).workers)) {
+  for (const w of rows(result(workerList).workers)) {
     if (known.has(w.dispatchId) || ["succeeded", "failed", "stopped", "abandoned", "released"].includes(w.state)) continue;
+    if (paths.has(pathOf(w.workspace))) continue; // a follow-up dispatch of a worker state.js already names
     const item = itemOfTitle(titleOf.get(w.taskId), ids);
     if (!item || arr(S.workers).some(x => x.item === item && x.tone !== "done")) continue;
     out[item] = { dispatch: w.dispatchId, path: pathOf(w.workspace), state: w.state };
@@ -99,7 +102,7 @@ const SUMMARY_LINE = /^[ \t>*\-\d.]*SUMMARY:[ \t*]*(.+)$/im;
 // the card shows what the PR does so far without waiting for the hub. Uses every fetched message, handled or not.
 function notes(inbox, itemOf, after) {
   const out = {};
-  for (const m of arr(result(inbox).messages).filter(m => ["status", "worker_done"].includes(m.type)).sort((a, b) => a.sequence - b.sequence)) {
+  for (const m of rows(result(inbox).messages).filter(m => ["status", "worker_done"].includes(m.type)).sort((a, b) => a.sequence - b.sequence)) {
     const hit = SUMMARY_LINE.exec(String(m.body || ""));
     const item = hit && itemOf(m);
     // fresh: the hub has not handled this message yet, so its own `done` in state.js is older than this line.
@@ -110,21 +113,22 @@ function notes(inbox, itemOf, after) {
 
 // Worker messages newer than state.js lastMsgId: what the hub has not handled yet.
 function pending(S, inbox, workerList, taskList, ids, discovered) {
-  const msgs = arr(result(inbox).messages).filter(m => FROM_WORKERS.has(m.type)).sort((a, b) => a.sequence - b.sequence);
-  const all = arr(result(inbox).messages);
+  const msgs = rows(result(inbox).messages).filter(m => FROM_WORKERS.has(m.type)).sort((a, b) => a.sequence - b.sequence);
+  const all = rows(result(inbox).messages);
   const last = S.lastMsgId ? all.find(m => m.id === S.lastMsgId) : null;
   // lastMsgId outside the fetched window is older than all of it; an empty one means nothing was handled yet.
   const after = last ? last.sequence : -Infinity;
   const fresh = msgs.filter(m => m.sequence > after);
-  const titleOf = new Map(arr(result(taskList).tasks).map(t => [t.id, t.title]));
+  const titleOf = new Map(rows(result(taskList).tasks).map(t => [t.id, t.title]));
   // `send` to a worker that already reported, or was stopped, continues it under a new dispatch id whose task is titled
-  // after the message, not the item. Its worktree still names the item, so the path comes first and the rest override it.
+  // after the message, not the item. Its worktree still names the item, so the path comes last and
+  // wins: a message titled "N1: merged, rebase" sent to N2's worker makes a task whose title names N1.
   const itemOfPath = new Map(arr(S.workers).filter(w => w.path).map(w => [w.path, w.item]));
   const itemOfDispatch = new Map([
-    ...arr(result(workerList).workers).map(w => [w.dispatchId, itemOfPath.get(pathOf(w.workspace))]).filter(([, i]) => i),
     ...arr(S.workers).filter(w => w.dispatch).map(w => [w.dispatch, w.item]),
     ...Object.entries(discovered).map(([item, d]) => [d.dispatch, item]),
-    ...arr(result(workerList).workers).map(w => [w.dispatchId, itemOfTitle(titleOf.get(w.taskId), ids)]).filter(([, i]) => i)
+    ...rows(result(workerList).workers).map(w => [w.dispatchId, itemOfTitle(titleOf.get(w.taskId), ids)]).filter(([, i]) => i),
+    ...rows(result(workerList).workers).map(w => [w.dispatchId, itemOfPath.get(pathOf(w.workspace))]).filter(([, i]) => i)
   ]);
   const payload = m => { try { return JSON.parse(m.payload || "{}"); } catch { return {}; } };
   const itemOf = m => { const p = payload(m); return itemOfDispatch.get(p.dispatchId) || itemOfTitle(titleOf.get(p.taskId), ids) || itemOfTitle(m.subject, ids); };
@@ -139,7 +143,7 @@ function pending(S, inbox, workerList, taskList, ids, discovered) {
     if (m.type === "status" && PHASE_NUM[p.phase] && (!e.phase || PHASE_NUM[p.phase] >= PHASE_NUM[e.phase])) e.phase = p.phase;
   }
   return {
-    count: fresh.length, more: !last && !!S.lastMsgId && msgs.length >= INBOX_LIMIT,
+    count: fresh.length, more: !last && !!S.lastMsgId && all.length >= INBOX_LIMIT,
     oldestAt: fresh.length ? fresh[0].created_at : null, items, notes: notes(inbox, itemOf, after)
   };
 }
@@ -150,7 +154,7 @@ async function syncWorkers(S, ps, discovered, errors) {
     ...Object.entries(discovered).filter(([, d]) => d.path).map(([item, d]) => ({ item, path: d.path, dispatch: d.dispatch }))
   ];
   if (!watched.length || !ps) return {};
-  const byPath = new Map(arr(result(ps).worktrees).map(r => [r.path, r]));
+  const byPath = new Map(rows(result(ps).worktrees).map(r => [r.path, r]));
   const out = {};
   await Promise.all(watched.map(async w => {
     const row = byPath.get(w.path);
@@ -385,7 +389,7 @@ async function syncOnce(withGh) {
 function alive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; } }
 
 if (require.main !== module) {
-  module.exports = { notes, pending, parseVera, appPending, transcriptOf, readTranscript }; // loaded by tests: export the pure functions, start nothing
+  module.exports = { notes, pending, discover, parseVera, appPending, transcriptOf, readTranscript }; // loaded by tests: export the pure functions, start nothing
 } else if (process.argv.includes("--once")) {
   syncOnce(true).then(() => process.exit(0));
 } else {
