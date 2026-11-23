@@ -1,0 +1,132 @@
+"use strict";
+// A hub resumed after the worker protocol changed in this skill writes protocol.md again and sends the new text to its
+// running workers, so they stop following rules the skill no longer has. scripts/protocolhash.cjs hashes only the parts
+// of the skill that protocol.md is written from; state.js records that hash as protocolFrom, so a resume after a change
+// elsewhere sends nothing.
+const test = require("node:test");
+const assert = require("node:assert");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const vm = require("node:vm");
+const { spawnSync } = require("node:child_process");
+
+const skillDir = path.join(__dirname, "..", "skills", "hub");
+const read = f => fs.readFileSync(path.join(skillDir, f), "utf8");
+const skill = read("SKILL.md");
+
+// A copy of the skill's scripts and references, so a test can edit a reference and hash again.
+function copy(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "protohash-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  for (const sub of ["scripts", "references"]) fs.cpSync(path.join(skillDir, sub), path.join(dir, sub), { recursive: true });
+  const hash = (...args) => {
+    const r = spawnSync(process.execPath, [path.join(dir, "scripts", "protocolhash.cjs"), ...args], { encoding: "utf8" });
+    return { code: r.status, out: r.stdout, err: r.stderr };
+  };
+  const edit = (f, from, to) => {
+    const p = path.join(dir, "references", f), text = fs.readFileSync(p, "utf8");
+    assert.ok(text.includes(from), `${f} contains ${from}`);
+    fs.writeFileSync(p, text.replace(from, to));
+  };
+  return { dir, hash, edit };
+}
+
+const ok = r => { assert.strictEqual(r.code, 0, r.out + r.err); assert.match(r.out, /^[0-9a-f]{40}\n$/); return r.out.trim(); };
+const cannot = (r, reason) => {
+  assert.strictEqual(r.code, 2, r.out + r.err);
+  assert.match(r.out, /^cannot hash: [^\n]+\n$/);
+  assert.match(r.out, reason);
+  assert.strictEqual(r.err, "");
+};
+
+test("protocolhash prints one hash, the same each run, and another one for the Claude app", t => {
+  const { hash } = copy(t);
+  const orca = ok(hash());
+  assert.strictEqual(ok(hash()), orca);
+  assert.notStrictEqual(ok(hash("--runtime", "claude-app")), orca);
+});
+
+test("protocolhash changes when the protocol block, its instructions, or the walkthrough template changes", t => {
+  const { hash, edit } = copy(t);
+  let before = ok(hash());
+  edit("worker-spec.md", "1. ONE PR.", "1. ONE PR ONLY.");
+  assert.notStrictEqual(ok(hash()), before, "the protocol block");
+  before = ok(hash());
+  edit("worker-spec.md", "Keep it in English; it is agent-to-agent text.", "Keep it in English.");
+  assert.notStrictEqual(ok(hash()), before, "the instructions for writing it");
+  before = ok(hash());
+  edit("walkthrough.md", "  flow: [", "  flow: [ // edited");
+  assert.notStrictEqual(ok(hash()), before, "the walkthrough template");
+});
+
+test("protocolhash stays the same when only text workers never get changes", t => {
+  const { hash, edit } = copy(t);
+  const orca = ok(hash()), app = ok(hash("--runtime", "claude-app"));
+  edit("worker-spec.md", "## Task part (one per worker)\n", "## Task part (one per worker)\n\nEdited.\n");
+  edit("walkthrough.md", "## Check it, then have it reviewed\n", "## Check it, then have it reviewed\n\nEdited.\n");
+  edit("claude-app.md", "## Escalations\n", "## Escalations\n\nEdited.\n");
+  assert.strictEqual(ok(hash()), orca);
+  assert.strictEqual(ok(hash("--runtime", "claude-app")), app);
+  edit("claude-app.md", "## Protocol on the Claude app\n", "## Protocol on the Claude app\n\nEdited.\n");
+  assert.strictEqual(ok(hash()), orca, "the Orca hash leaves claude-app.md out");
+  assert.notStrictEqual(ok(hash("--runtime", "claude-app")), app, "the Claude app hash takes its protocol changes");
+});
+
+test("protocolhash prints no hash when a part it hashes is missing or the arguments are wrong", t => {
+  const { dir, hash, edit } = copy(t);
+  edit("claude-app.md", "## Protocol on the Claude app\n", "## Protocol in the app\n");
+  cannot(hash("--runtime", "claude-app"), /Protocol on the Claude app/);
+  ok(hash());
+  edit("walkthrough.md", "```js\n", "```\n");
+  cannot(hash(), /walkthrough\.md/);
+  fs.rmSync(path.join(dir, "references", "worker-spec.md"));
+  cannot(hash(), /worker-spec\.md/);
+  cannot(hash("--runtime", "codex"), /usage/);
+  cannot(hash("--runtime"), /usage/);
+});
+
+test("state.js carries protocolFrom, empty by default", () => {
+  const sandbox = { window: {} };
+  vm.runInNewContext(read("templates/state.js"), sandbox);
+  assert.strictEqual(sandbox.window.HUB_STATE.protocolFrom, "");
+});
+
+test("building the folder records protocolFrom from protocolhash.cjs", () => {
+  const step5 = skill.match(/\n5\. \*\*Build the folder\.\*\*[^\n]*/);
+  assert.ok(step5, "SKILL.md has no step 5");
+  assert.ok(step5[0].includes("set `protocolFrom` in `state.js` to the line `node <this skill's folder>/scripts/protocolhash.cjs` prints (with `--runtime claude-app` on the Claude app"), "step 5 sets protocolFrom");
+  assert.match(skill, /\| `protocol\.md` \| you, from \[references\/worker-spec\.md\]\(references\/worker-spec\.md\): at step 5, and again on a resume after the protocol changed \|/);
+});
+
+test("resume sends a changed protocol before it records it, with the live slots from state.js", () => {
+  const m = skill.match(/\n {3}\*\*Resume\*\* an existing hub:\n([\s\S]*?)\n2\. \*\*Read the repo/);
+  assert.ok(m, "SKILL.md has no Resume bullets in Start or resume step 1");
+  const lines = m[1].split("\n");
+  const start = lines.findIndex(l => l.startsWith("   - Protocol"));
+  assert.ok(start > lines.findIndex(l => l.includes("orca orchestration worker-list")), "the protocol bullet follows the worker list reconcile");
+  const bullet = lines.slice(start, lines.findIndex((l, i) => i > start && l.startsWith("   - "))).join("\n");
+  assert.match(bullet, /When it prints the `protocolFrom` in `state\.js`, go on/);
+  assert.match(bullet, /a `cannot hash:` line is not a hash/);
+  assert.match(bullet, /`hubSession` and the autonomy level, which come from `state\.js`/);
+  // Live workers include support workers waiting with an open PR: they follow rule 6f when the hub reopens them.
+  assert.match(bullet, /each live worker: a `workers` row whose tone is not `done` and whose dispatch is not `released` \(on the Claude app, whose session is not archived\), including a `support` worker waiting with its PR open/);
+  const order = ["`<hub>/protocol.new.md`", "`cmp -s <hub>/protocol.new.md <hub>/protocol.md`", "`send` each live worker",
+    "No reply needed", "replace the protocol part of every live worker's `specs/<id>.md`", "`mv <hub>/protocol.new.md <hub>/protocol.md`", "set `protocolFrom` to the hash it printed"];
+  const at = order.map(s => bullet.indexOf(s));
+  at.forEach((n, i) => assert.ok(n >= 0, `the protocol bullet says ${order[i]}`));
+  assert.deepStrictEqual([...at].sort((a, b) => a - b), at, "send, then replace, then record: a resume cut short sends again");
+});
+
+test("after a compaction the hub skips the protocol check, but finishes one a compaction cut short", () => {
+  assert.match(skill, /skip the rest of step 1 \(templates, `preflight\.cjs`, sync, sidebar, and the protocol bullet unless `<hub>\/protocol\.new\.md` exists: then do its steps 2 and 3\)/);
+});
+
+test("protocol.md keeps the live autonomy level and hub session", () => {
+  assert.match(skill, /set `autonomy`, set the level in rule 13 of `protocol\.md` and of each live worker's `specs\/<id>\.md` \(a worker re-reads its spec after its own compaction\)/);
+  assert.match(read("references/claude-app.md"), /set `hubSession`, write the new id into rule 0 of `protocol\.md` and of each live worker's `specs\/<id>\.md`, and send every live worker `HUB MOVED/);
+});
+
+test("the old-layout upgrade records protocolFrom when it replaces protocol.md", () => {
+  assert.match(read("references/upgrade.md"), /3\. \*\*protocol\.md\.\*\* Replace it [^\n]*set `protocolFrom` as SKILL\.md step 5 does/);
+});

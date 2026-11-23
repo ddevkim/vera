@@ -112,7 +112,7 @@ In "Closing the hub", step 1 checks `list_sessions` and `git worktree list` in p
 
 In SKILL.md, "Start or resume", in place of the `run-use`, `worker-list`, and `inbox` bullet:
 
-1. `mcp__ccd_session_mgmt__get_session` with `self`. When its id differs from `hubSession`, this is a new hub session: set `hubSession` and send every live worker `HUB MOVED: send every VERA message to <your session id> from now on.` Workers started by the old session stay nested under it in the sidebar.
+1. `mcp__ccd_session_mgmt__get_session` with `self`. When its id differs from `hubSession`, this is a new hub session: set `hubSession`, write the new id into rule 0 of `protocol.md` and of each live worker's `specs/<id>.md`, and send every live worker `HUB MOVED: send every VERA message to <your session id> from now on.` Workers started by the old session stay nested under it in the sidebar.
 2. `mcp__ccd_session_mgmt__list_sessions` with `linked: true` (empty in a new session: use the `session` ids in `workers`), `gh pr list --author @me --state open`, and `node <hub>/sync.cjs --once`, then read `<hub>/live.js`: its `hub` lists every VERA message workers sent after `lastMsgAt`. Reconcile them as the Orca bullet says.
 
 After a compaction (SKILL.md, "After a compaction"), the inbox reconcile is step 2 alone; skip step 1 unless `get_session` shows a new session id.
