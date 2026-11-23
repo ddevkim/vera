@@ -132,6 +132,9 @@ test("resume writes each live worker's allow list again", () => {
   assert.ok(lines.indexOf(bullet) > lines.findIndex(l => l.includes("orca orchestration worker-list")), "it follows the worker list reconcile");
   assert.match(bullet, /At `medium` or `high`, run `allow\.cjs write <its path> <level>` again for each live worker/);
   assert.match(bullet, /`not written:`/);
+  assert.match(bullet, /live worker \(the protocol bullet says which\) whose worktree still exists/);
+  // write removes the old rules first, so a write that then fails leaves a running worker without them.
+  assert.match(bullet, /When it exits 1, or prints `refused:` or `not valid JSON settings`[^\n]*tell the developer, and go on to the next worker/);
 });
 
 test("protocol.md keeps the live autonomy level and hub session", () => {
