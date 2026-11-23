@@ -25,7 +25,6 @@ You discuss a feature with Claude Code or Codex, then invoke the hub. Your sessi
 - `git`
 - `gh`, logged in
 - `node` 18 or newer
-- macOS or Linux: the hub runs POSIX shell commands
 
 The skill installs nothing. It checks these itself before a hub starts, with one command you can also run:
 
@@ -34,6 +33,8 @@ node <skill folder>/scripts/preflight.cjs
 ```
 
 It prints one `missing:` line per problem. A missing `orchestration` skill comes with the command that installs it: `orca skills install --skill orchestration`. In the Claude desktop app the hub adds `--runtime claude-app`, which checks the app instead of Orca.
+
+The hub runs POSIX shell commands, so it needs macOS or Linux; the check does not look at the system.
 
 ### What the checks cover
 
