@@ -24,7 +24,8 @@ You discuss a feature with Claude Code or Codex, then invoke the hub. Your sessi
 - One place to run workers: the Orca app with its `orca` CLI and its `orchestration` skill, or the Claude desktop app (Code tab)
 - `git`
 - `gh`, logged in
-- `node`
+- `node` 18 or newer
+- macOS or Linux: the hub runs POSIX shell commands
 
 The skill installs nothing. It checks these itself before a hub starts, with one command you can also run:
 
@@ -33,6 +34,16 @@ node <skill folder>/scripts/preflight.cjs
 ```
 
 It prints one `missing:` line per problem. A missing `orchestration` skill comes with the command that installs it: `orca skills install --skill orchestration`. In the Claude desktop app the hub adds `--runtime claude-app`, which checks the app instead of Orca.
+
+### What the checks cover
+
+The independent review, the changed-lines hash the merge compares, and the allow list at Medium and High catch mistakes: a PR that changed after its review, a merge of a commit nobody read, a push to the wrong place. They are not a sandbox.
+
+- A worker is an agent session that runs as you. It can reach what your account can: files outside its worktree, the hub folder with the hashes the review recorded, and your `gh` login.
+- The allow list matches command text. A command it does not name, or one wrapped in a script, is decided by the session's own permission mode.
+- CI runs every push, including a fix pushed before the next review round reads it. Keep secrets that such a run must not use behind what your repo already protects, such as environments or protected branches.
+
+Run a hub on a repo, and with instructions, you would give an agent session anyway.
 
 ### Install
 
