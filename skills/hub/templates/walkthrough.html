@@ -342,9 +342,10 @@ function diffBlock(path) {
   const f = DIFF && !stale ? arr(DIFF.files).find(x => x.path === path) : null;
   if (!f) return `<p style="color:var(--text-2)">${D.map === undefined ? T.diffOld : T.diffNotYet}</p>`;
   if (f.omitted) return `<p style="color:var(--text-2)">${T.diffOmitted(esc(f.omitted))}</p>`;
-  if (!f.lines) return `<p style="color:var(--text-2)">${f.note === "binary" ? T.diffBinary : T.diffMode}</p>`;
+  if (!Array.isArray(f.lines)) return `<p style="color:var(--text-2)">${f.note === "binary" ? T.diffBinary : T.diffMode}</p>`;
   let a = 0, b = 0;
-  const rows = f.lines.map(l => {
+  const rows = f.lines.map(x => {
+    const l = String(x ?? "");
     const h = l.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
     if (h) { a = Number(h[1]); b = Number(h[2]); return `<div class="row hunk"><span class="ln2"></span><span class="ln2"></span><span class="src">${esc(l)}</span></div>`; }
     if (l[0] === "\\") return "";
@@ -413,7 +414,7 @@ function render() {
   const files = arr(D.files);
   const added = files.reduce((s, f) => s + (Number(f.added) || 0), 0), removed = files.reduce((s, f) => s + (Number(f.removed) || 0), 0);
   const i = me();
-  const latest = Math.max(Number(D.round) || 1, i && ID_RE.test(String(i.walkthrough || "")) ? Number(String(i.walkthrough).split("-w").pop()) : 0);
+  const latest = Math.min(99, Math.max(Number(D.round) || 1, i && ID_RE.test(String(i.walkthrough || "")) ? Number(String(i.walkthrough).split("-w").pop()) : 0)); // a wrong number must not draw a link per round
   const rounds = latest > 1 ? `<span class="rounds">${T.rounds}${Array.from({ length: latest }, (_, k) => k + 1 === Number(D.round) ? `<b>${k + 1}</b>` : `<a href="walkthrough.html?w=${esc(D.item)}-w${k + 1}">${k + 1}</a>`).join("")}</span>` : "";
   const reviews = arr(D.review), lastReview = reviews[reviews.length - 1];
   const counts = [null, arr(D.map && D.map.nodes).length, arr(D.flow).length, files.length, arr(D.tests).length, arr(D.risks).length, arr(D.qa).length];

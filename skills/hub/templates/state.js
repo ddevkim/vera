@@ -64,7 +64,7 @@ window.HUB_STATE = {
       //         | merged | blocked (something stops the work)
       // phases: checkpoints reached, 0-8 (red, green, verified, reviewed, walkthrough approved, pr-open, ci-green, merged)
       // done: what this PR does so far, one sentence (from the worker's SUMMARY line; at the merge, what the PR delivered).
-      // base, pr, prUrl (https only, rendered as a link), risk: rendered. ext: one short sentence on why the item is where it is.
+      // pr, prUrl (https only, rendered as a link), risk, mergeSha (on a merged card): rendered. base: not shown; an item on "main" waits for merge approval. ext: one short sentence on why the item is where it is.
       // after: ids of items in other lanes that must finish first (rendered as links to their cards).
       // waiting: set while the item's worker waits on the hub or the developer ("결정: <short question>");
       //   rendered as a pill, and the page then does not mark the worker as stopped. Remove it when answered.
@@ -75,7 +75,7 @@ window.HUB_STATE = {
       // repo: only when the item's PR lives in another repo than the hub's (sync.cjs looks it up there).
       // Bookkeeping (not rendered): askId (id of the worker's pending ask or question: reply --id), reviewRound, reviewHead (head sent
       //   to the reviewer), reviewedDiff (changed-lines hash the reviewer passed), walkDiff (changed-lines hash the developer approved),
-      //   overruled (["finding — why"]), pendingRebase (a rebase command held until the walkthrough is answered), branch, head, mergeSha.
+      //   overruled (["finding — why"]), pendingRebase (a rebase command held until the walkthrough is answered), branch, head.
       { id: "N1", title: "알림 설정 표를 추가한다", status: "ready", phases: 7, done: "사용자마다 야간 알림 여부를 저장하는 표를 추가했고 시험 4건이 통과합니다.", base: "main", risk: ["마이그레이션"],
         branch: "feat/notify-n1-table", pr: 41, prUrl: "https://github.com/acme/app/pull/41", head: "d4e5f6a",
         reviewRound: 1, reviewHead: "d4e5f6a", reviewedDiff: "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c", walkDiff: "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c", ext: "승인하면 허브가 병합합니다",
