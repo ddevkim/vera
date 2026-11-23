@@ -36,10 +36,20 @@ if (!D || typeof D !== "object") {
   process.exit(1);
 }
 const arr = x => Array.isArray(x) ? x : [];
+// The entries of a list of records that are objects. Any other entry (null, an array, a string, a number) is a problem
+// named by its place: the page reads fields off each entry.
+const isObj = e => !!e && typeof e === "object" && !Array.isArray(e);
+const objs = (x, where) => arr(x).filter((e, i) => isObj(e) || (problems.push(`${where}[${i}]: not an object`), false));
 
 // 2. Required fields.
 for (const k of ["item", "round", "title", "head", "base", "files"]) if (D[k] === undefined || D[k] === "") problems.push(`missing field: ${k}`);
-if (D.kind !== "docs" && !arr(D.purpose && D.purpose.spec).length) problems.push("missing field: purpose.spec");
+const purpose = isObj(D.purpose) ? D.purpose : {};
+const spec = objs(purpose.spec, "purpose.spec");
+if (D.kind !== "docs" && !spec.length) problems.push("missing field: purpose.spec");
+// Lists of records only the page reads: their entries must be objects too.
+for (const k of ["design", "data", "injections", "risks", "qa"]) objs(D[k], k);
+objs(purpose.notHere, "purpose.notHere");
+objs(D.review, "review").forEach(r => objs(r.findings, `review[${arr(D.review).indexOf(r)}].findings`));
 
 // 3. The worktree is clean and at the walkthrough's head.
 if (git("status", "--porcelain").trim()) problems.push("the worktree has uncommitted changes: commit them or leave them out, then write the walkthrough again");
@@ -58,10 +68,10 @@ const fileLines = f => {
 };
 const norm = s => s.replace(/\s+$/, "");
 const refs = [
-  ...arr(D.flow).map(s => ({ ...s, where: "flow" })),
-  ...arr(D.edges).flatMap(e => arr(e.steps).map(s => ({ ...s, where: `edges "${e.name}"` }))),
-  ...arr(D.tests).map(s => ({ ...s, where: "tests" })),
-  ...arr(D.changes).filter(c => c && typeof c === "object" && !c.removed).map(s => ({ ...s, where: "changes" })),
+  ...objs(D.flow, "flow").map(s => ({ ...s, where: "flow" })),
+  ...objs(D.edges, "edges").flatMap(e => objs(e.steps, `edges[${arr(D.edges).indexOf(e)}].steps`).map(s => ({ ...s, where: `edges "${e.name}"` }))),
+  ...objs(D.tests, "tests").map(s => ({ ...s, where: "tests" })),
+  ...objs(D.changes, "changes").filter(c => !c.removed).map(s => ({ ...s, where: "changes" })),
 ];
 for (const s of refs) {
   if (!s.file) continue;
@@ -79,15 +89,16 @@ for (const s of refs) {
 
 // 5. The structure map names real files, known layers, and nodes that exist.
 const map = D.map && typeof D.map === "object" ? D.map : {};
-const layers = arr(map.layers), ids = new Set(arr(map.nodes).map(n => n.id));
-if (["behaviour", "schema"].includes(D.kind) && !arr(map.nodes).length) problems.push("missing field: map.nodes (the modules this PR touches)");
-for (const n of arr(map.nodes)) {
+const nodes = objs(map.nodes, "map.nodes");
+const layers = arr(map.layers), ids = new Set(nodes.map(n => n.id));
+if (["behaviour", "schema"].includes(D.kind) && !nodes.length) problems.push("missing field: map.nodes (the modules this PR touches)");
+for (const n of nodes) {
   if (!n.id || !n.label) problems.push(`map: a node needs id and label (${JSON.stringify(n)})`);
   if (!layers.includes(n.layer)) problems.push(`map: node ${n.id} has layer ${JSON.stringify(n.layer)}, which is not in map.layers`);
   if (!["new", "changed", "existing"].includes(n.state)) problems.push(`map: node ${n.id} needs state new, changed, or existing`);
   if (n.file && !fileLines(n.file)) problems.push(`map: node ${n.id} — ${n.file} does not exist at the head`);
 }
-for (const l of arr(map.links)) for (const end of [l.from, l.to]) if (!ids.has(end)) problems.push(`map: link ${l.from} → ${l.to} names ${JSON.stringify(end)}, which is not a node id`);
+for (const l of objs(map.links, "map.links")) for (const end of [l.from, l.to]) if (!ids.has(end)) problems.push(`map: link ${l.from} → ${l.to} names ${JSON.stringify(end)}, which is not a node id`);
 
 // 6. files equals the diff against the base, path by path and count by count.
 const diff = new Map();
@@ -95,7 +106,7 @@ for (const row of git("diff", "--numstat", "--no-renames", `${base}...HEAD`).tri
   const [a, r, p] = row.split("\t");
   diff.set(p, { a: a === "-" ? 0 : Number(a), r: r === "-" ? 0 : Number(r) });
 }
-const listed = new Map(arr(D.files).map(f => [f.path, f]));
+const listed = new Map(objs(D.files, "files").map(f => [f.path, f]));
 for (const [p, { a, r }] of diff) {
   const f = listed.get(p);
   if (!f) problems.push(`files: ${p} changed (+${a} −${r}) but is not listed`);
