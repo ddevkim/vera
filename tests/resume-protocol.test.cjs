@@ -118,8 +118,20 @@ test("resume sends a changed protocol before it records it, with the live slots 
   assert.deepStrictEqual([...at].sort((a, b) => a - b), at, "send, then replace, then record: a resume cut short sends again");
 });
 
-test("after a compaction the hub skips the protocol check, but finishes one a compaction cut short", () => {
-  assert.match(skill, /skip the rest of step 1 \(templates, `preflight\.cjs`, sync, sidebar, the hash form and allow list bullets, and the protocol bullet unless `<hub>\/protocol\.new\.md` exists: then do its steps 2 and 3\)/);
+// A plugin update followed by /reload-plugins changes the skill under a running hub. A compaction is when the hub reads
+// the skill again, so it is where the hub can notice: one command when nothing changed, the resume steps when it did.
+test("after a compaction the hub checks the protocol hash, and resumes fully only when the skill changed or a resume was cut short", () => {
+  const m = skill.match(/\*\*After a compaction\.\*\*[^\n]*/);
+  assert.ok(m, "SKILL.md has no After a compaction paragraph");
+  const order = ["run the inbox reconcile", "Then run `protocolhash.cjs` as step 5 does",
+    "When it prints the `protocolFrom` in `state.js` and `<hub>/protocol.new.md` does not exist, skip the rest of step 1",
+    "Otherwise the skill changed, or a resume was cut short: do the Resume bullets of step 1 now, except the one about a review that ran in the old session",
+    "Do not restart a review"];
+  const at = order.map(s => m[0].indexOf(s));
+  at.forEach((n, i) => assert.ok(n >= 0, `the paragraph says: ${order[i]}`));
+  assert.deepStrictEqual([...at].sort((a, b) => a - b), at);
+  // The paragraph must stay within what a compaction keeps of this file.
+  assert.ok(skill.indexOf("Otherwise the skill changed") < skill.indexOf("## Loop"));
 });
 
 // A worktree written by an older version of this skill lacks the rules added since (the gh pr merge refusal). write
