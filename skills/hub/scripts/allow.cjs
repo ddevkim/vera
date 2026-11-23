@@ -18,7 +18,8 @@ const { spawnSync } = require("node:child_process");
 // bare or with anything after it, because the hub runs every merge (a merge through gh api, a gh alias, or a
 // wrapper such as env X=y gh pr merge is not caught). Ask outranks allow, so an rm that may
 // leave the worktree, or a gh pr create aimed at another repo (--repo, -R with or without a
-// space; --base stays allowed for stacked PRs), still prompts. Rules match command text: a best-effort
+// space; --base stays allowed for stacked PRs), or one whose body comes from a file outside the worktree
+// (--body-file or -F with a path that starts with /, ~ or $, or holds ..: gh would post that file to GitHub), still prompts. Rules match command text: a best-effort
 // limit, not a boundary.
 const RULES = {
   allow: ["Bash(git push)", "Bash(git push -u origin HEAD)", "Bash(git push --force-with-lease)",
@@ -26,7 +27,9 @@ const RULES = {
   ask: ["Bash(rm /*)", "Bash(rm * /*)", "Bash(rm *..*)", "Bash(rm *~*)", "Bash(rm *$*)",
     "Bash(rm *.git)", "Bash(rm *.git/*)", "Bash(rm *.git *)",
     "Bash(gh pr create --repo *)", "Bash(gh pr create * --repo *)", "Bash(gh pr create --repo=*)",
-    "Bash(gh pr create * --repo=*)", "Bash(gh pr create -R*)", "Bash(gh pr create * -R*)"],
+    "Bash(gh pr create * --repo=*)", "Bash(gh pr create -R*)", "Bash(gh pr create * -R*)",
+    ...["--body-file", "-F"].flatMap((f) => ["/", "~", "$", "=/", "=~", "=$"].map((p) => `Bash(gh pr create *${f}${p.startsWith("=") ? p : ` ${p}`}*)`)
+      .concat([`Bash(gh pr create *${f}*..*)`]))],
   deny: ["Bash(git push --force *)", "Bash(git push * --force)", "Bash(git push * --force *)",
     "Bash(git push -f *)", "Bash(git push * -f)", "Bash(git push * -f *)", "Bash(git push * +*)",
     "Bash(gh pr merge)", "Bash(gh pr merge *)"],
