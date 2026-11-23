@@ -104,3 +104,27 @@ test("hung tool: times out into a missing line", () => {
   assert.strictEqual(r.code, 1);
   assert.ok(r.lines.some((l) => /^missing: .*gh/.test(l)), r.lines.join("\n"));
 });
+
+// The audit ran `--runtime=claude-app` and got Orca checked instead: an argument the script did not know was ignored.
+function runArgs(args) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "preflight-"));
+  for (const [name, body] of Object.entries({ ...OK, orca: null })) {
+    if (body === null) continue;
+    fs.writeFileSync(path.join(dir, name), "#!/bin/sh\n" + body + "\n");
+    fs.chmodSync(path.join(dir, name), 0o755);
+  }
+  const r = spawnSync(process.execPath, [SCRIPT, ...args], { env: { PATH: dir }, encoding: "utf8", timeout: 20000 });
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { code: r.status, out: r.stdout };
+}
+
+test("--runtime=claude-app is the Claude app check, and an unknown argument is refused", () => {
+  const eq = runArgs(["--runtime=claude-app"]);
+  assert.strictEqual(eq.code, 0, eq.out);
+  assert.match(eq.out, /^ok: claude-app, /);
+  for (const args of [["--runtime"], ["--runtime", "nope"], ["--runtim", "claude-app"], ["claude-app"]]) {
+    const r = runArgs(args);
+    assert.strictEqual(r.code, 1, args.join(" "));
+    assert.match(r.out, /^missing: usage: /);
+  }
+});

@@ -222,3 +222,19 @@ test("walkcheck checks the spec entries of a docs walkthrough too, though it nee
   assert.ok(lines.includes("purpose.spec[0]: not an object"), r.out);
   assert.ok(!lines.includes("missing field: purpose.spec"), r.out);
 });
+
+// `git show HEAD:<folder>` succeeds and prints the folder's listing, so an excerpt quoting a file name from it once passed.
+test("walkcheck fails when a file:line names a folder", t => {
+  const s = setup(t);
+  fs.mkdirSync(path.join(s.wt, "src"));
+  fs.writeFileSync(path.join(s.wt, "src", "x.js"), "exports.y = 1;\n");
+  git(s.wt, "add", ".");
+  git(s.wt, "commit", "-qm", "a folder");
+  s.data.head = git(s.wt, "rev-parse", "--short", "HEAD").trim();
+  s.data.files.push({ path: "src/x.js", added: 1, removed: 0 });
+  assert.strictEqual(git(s.wt, "show", "HEAD:src").split("\n")[2], "x.js", "the fixture: line 3 of the folder listing is the file name");
+  s.data.flow.push({ title: "a folder", file: "src", line: 3, code: "x.js" });
+  const r = walkcheck(s, s.data);
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.match(r.out, /flow: src/);
+});

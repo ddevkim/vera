@@ -8,8 +8,13 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const runtimeArg = process.argv.indexOf("--runtime");
-const RUNTIME = runtimeArg > 0 ? process.argv[runtimeArg + 1] : "orca";
+// --runtime <name> or --runtime=<name>. Anything else is refused: a misspelt flag must not fall back to checking Orca.
+const argv = process.argv.slice(2).flatMap((a) => (a.startsWith("--runtime=") ? ["--runtime", a.slice(10)] : [a]));
+const RUNTIME = argv.length === 0 ? "orca" : argv[1];
+if (argv.length !== 0 && !(argv.length === 2 && argv[0] === "--runtime" && ["orca", "claude-app"].includes(RUNTIME))) {
+  console.log("missing: usage: node preflight.cjs [--runtime orca|claude-app]");
+  process.exit(1);
+}
 
 const TIMEOUT_MS = Number(process.env.PREFLIGHT_TIMEOUT_MS) || 10000;
 
