@@ -201,9 +201,9 @@ test("a round number far beyond any real one does not make the page draw a link 
   assert.ok(links.length > 0 && links.length <= 100, `${links.length} links to a round`); // 99 rounds and the link to the latest one
 });
 
-test("a diff file whose lines are not a list still renders the step", async () => {
-  const bad = { ...DIFF, files: [{ path: "src/night.js", lines: "@@ -1 +1 @@" }] };
-  for (let hash = 1; hash <= 7; hash++) {
+test("a diff file whose lines are not a list of strings still renders the step", async () => {
+  for (const lines of ["@@ -1 +1 @@", [null, 3, "+a"]]) for (let hash = 1; hash <= 7; hash++) {
+    const bad = { ...DIFF, files: [{ path: "src/night.js", lines }] };
     const r = await render(current(), { ...at([FULL], [bad], [{ ...lane("walk", { walkthrough: ID }), lang: "en" }]), hash });
     assert.match(r.html, /class="meta"/, `step ${hash} did not render`);
   }

@@ -344,7 +344,8 @@ function diffBlock(path) {
   if (f.omitted) return `<p style="color:var(--text-2)">${T.diffOmitted(esc(f.omitted))}</p>`;
   if (!Array.isArray(f.lines)) return `<p style="color:var(--text-2)">${f.note === "binary" ? T.diffBinary : T.diffMode}</p>`;
   let a = 0, b = 0;
-  const rows = f.lines.map(l => {
+  const rows = f.lines.map(x => {
+    const l = String(x ?? "");
     const h = l.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
     if (h) { a = Number(h[1]); b = Number(h[2]); return `<div class="row hunk"><span class="ln2"></span><span class="ln2"></span><span class="src">${esc(l)}</span></div>`; }
     if (l[0] === "\\") return "";
