@@ -71,3 +71,22 @@ test("notes marks fresh only for messages after the given sequence", () => {
   assert.strictEqual(out.S1.fresh, false);
   assert.strictEqual(out.S2.fresh, true);
 });
+
+// Measured on Orca 1.4.271: `send` to a worker that already sent worker_done (or was stopped) continues it under a new
+// dispatch id and a task titled after the message's subject. Its messages carry that new id, so until the hub writes it
+// into state.js only the worktree path says which item they belong to.
+test("a message from a worker's follow-up dispatch counts for its item, by the worktree path", () => {
+  const S = { lastMsgId: "", workers: [{ item: "W1", dispatch: "ctx_old", path: "/w/app-w1", tone: "support" }] };
+  const workerList = { result: { workers: [
+    { dispatchId: "ctx_new", taskId: "task_new", state: "ready", workspace: "repo-id::/w/app-w1" },
+    { dispatchId: "ctx_old", taskId: "task_old", state: "succeeded", workspace: "repo-id::/w/app-w1" },
+    { dispatchId: "ctx_other", taskId: "task_x", state: "ready", workspace: "repo-id::/w/elsewhere" },
+  ] } };
+  const taskList = { result: { tasks: [{ id: "task_new", title: "REVIEW" }, { id: "task_old", title: "W1: add the table" }, { id: "task_x", title: "REVIEW" }] } };
+  const m = (sequence, dispatchId) => ({ id: `m${sequence}`, sequence, type: "worker_done", subject: "done", body: "SUMMARY: 고쳤습니다", created_at: `t${sequence}`,
+    payload: JSON.stringify({ dispatchId, taskId: dispatchId === "ctx_new" ? "task_new" : "task_x" }) });
+  const out = require(SYNC).pending(S, { result: { messages: [m(1, "ctx_new"), m(2, "ctx_other")] } }, workerList, taskList, new Set(["W1"]), {});
+  assert.deepStrictEqual(Object.keys(out.items), ["W1"]);
+  assert.strictEqual(out.items.W1.count, 1);
+  assert.strictEqual(out.notes.W1.text, "고쳤습니다");
+});

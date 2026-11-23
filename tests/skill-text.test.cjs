@@ -326,3 +326,20 @@ test("an approval that carries a comment is read by what the comment asks for", 
   assert.match(approval, /A question: answer it from the code, then ask for the approval again/);
   assert.match(walk, /An approval that carries a comment is read as in \[merging\.md\]\(merging\.md\), "Approval": a change they want now is \*\*Changes\*\* below, not \*\*Approved\*\*/);
 });
+
+// Measured with live workers on Orca 1.4.271. After `allow.cjs write` in a running worker's worktree, a Claude Code worker
+// was refused `gh pr merge --help` on its next try, while a Codex worker still ran it; a Codex worker started after the
+// write was refused. And `send` to a settled or stopped worker answered with a new dispatch id, whose old id
+// `worker-release` would not close.
+test("the skill says when rewritten rules reach a running worker, and to record the dispatch id a send returns", () => {
+  const skill = fs.readFileSync(path.join(__dirname, "..", "skills", "hub", "SKILL.md"), "utf8");
+  const cleanup = fs.readFileSync(path.join(__dirname, "..", "skills", "hub", "references", "cleanup.md"), "utf8");
+  assert.match(skill, /reaches a Claude Code worker at once, and a Codex worker only when its session next starts/);
+  const bullet = skill.split("\n").find(l => l.startsWith("- `send` to a worker that already sent `worker_done`"));
+  assert.ok(bullet, "the Loop has no bullet about the dispatch id a send returns");
+  assert.ok(skill.indexOf(bullet) > skill.indexOf("## Loop"));
+  assert.match(bullet, /`delivery` `follow_up` \(the same terminal\) or `reopened` \(a new one\) and gives a new `dispatchId`\. Write that id into the worker's `dispatch` in `state\.js` right away/);
+  assert.match(bullet, /`worker-release` of it answers `retained`, `ownership_transferred` and closes nothing/);
+  assert.match(bullet, /`ok: false` \(`start_failed`\) means the worker did not reopen/);
+  assert.match(cleanup, /`retained` with `ownership_transferred` means the row holds an id a later `send` replaced/);
+});
