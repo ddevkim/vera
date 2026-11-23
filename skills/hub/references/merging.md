@@ -12,12 +12,15 @@ Ask for approval only for an item that is `ready` (green CI on code the reviewer
 gh pr view <n> --json url,baseRefName,headRefOid,mergeStateStatus,reviewDecision,statusCheckRollup
 gh repo view --json deleteBranchOnMerge,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed
 git -C <repo path> fetch origin
-<the changed-lines hash at origin/<head-branch>, review.md>          # must equal the item's reviewedDiff
-git -C <repo path> merge-tree --write-tree origin/main origin/<head-branch>   # exit 0 = no conflict
+git -C <repo path> rev-parse origin/<head-branch>                    # S: must equal headRefOid above
+<the changed-lines hash at S, review.md>                             # must equal the item's reviewedDiff
+git -C <repo path> merge-tree --write-tree origin/main S             # exit 0 = no conflict
 ```
 
+S is the one commit the whole preflight is about: the commit GitHub shows as the PR's head, the commit you hash, and the commit you merge (`--match-head-commit S` below). Take it from `git rev-parse` here, never from a worker's message. If `headRefOid` is not S, fetch and start the preflight again; `--match-head-commit` then refuses a head pushed after it.
+
 - Hash differs from `reviewedDiff`: the PR's own lines changed after the review. It gets a new walkthrough round and a review first ([walkthrough.md](walkthrough.md), "Changes after the approval").
-- `mergeStateStatus: BEHIND`: say so. After approval, run `gh pr update-branch <n>`, wait for green CI, and compute the hash again: unchanged, merge with the new head without asking again; changed (the update touched the PR's own lines), treat it as a change after the approval and ask again.
+- `mergeStateStatus: BEHIND`: say so. After approval, run `gh pr update-branch <n>`, wait for green CI, and run the preflight again for its new S: hash unchanged, merge S without asking again; changed (the update touched the PR's own lines), treat it as a change after the approval and ask again.
 - `merge-tree` exits non-zero: name the conflicting files and send the rebase to the PR's worker.
 - `reviewDecision` is not `APPROVED` while the repo requires review: name the reviewer to ask. A force-push after an approval dismisses it; say it needs approval again ("재승인 필요").
 - A required check shown as `CANCELLED` blocks the merge even when another run of the same check passed (CI ran twice and one run was cancelled). Re-run it: `gh run rerun <run-id>`.
@@ -31,7 +34,7 @@ Only an explicit approval that names the items counts: "W1 병합해", choosing 
 
 An approval that carries a comment ("W1 병합해, 근데 함수 이름은 바꿔줘") is read by what the comment asks for, and the comment is never dropped:
 
-- A change to this PR before it merges, or you cannot tell whether they mean now or later: it is not an approval. `send` the change to the worker; the changed lines get a walkthrough round and a review ([walkthrough.md](walkthrough.md), "Changes after the approval"), and you ask again.
+- A change to this PR before it merges, or you cannot tell whether they mean now or later: it is not an approval. Set the item `pr`, phases 6, and `send` the worker `CHANGES: <each change, with file:line>` (protocol rule 6c); the changed lines get a walkthrough round and a review ([walkthrough.md](walkthrough.md), "Changes after the approval"), and you ask again.
 - Work for later ("다음 PR에서", "나중에"): the approval counts. Log the comment in their words and list it under follow-ups in the final report ([cleanup.md](cleanup.md)).
 - A question: answer it from the code, then ask for the approval again.
 
@@ -45,7 +48,7 @@ Use the method the repo's PR rules name. Otherwise `--squash` when `squashMergeA
 
 ## Merging a PR with nothing stacked on it
 
-`gh pr list --base <its branch> --state open` is empty and no active worker builds on its branch: `gh pr merge <n> --<method> --match-head-commit <approved head>`. Record `mergeSha` from `gh pr view <n> --json mergeCommit -q .mergeCommit.oid`, then clean up the item.
+`gh pr list --base <its branch> --state open` is empty and no active worker builds on its branch: `gh pr merge <n> --<method> --match-head-commit <S>` (the preflight's S). Record `mergeSha` from `gh pr view <n> --json mergeCommit -q .mergeCommit.oid`, then clean up the item.
 
 ## Merging the bottom of a stack
 
@@ -54,7 +57,7 @@ A PR whose base is another PR's branch is **stacked**. If the parent's branch is
 For a stack `main ← A ← B ← C`, plus `A ← D` where D's worker has not opened a PR yet:
 
 1. Record the head SHA of every branch built on A, directly or not, with or without a PR: `old-A`, `old-B`, `old-C`, `old-D`.
-2. `gh pr merge A --<method> --match-head-commit <old-A>`.
+2. `gh pr merge A --<method> --match-head-commit <old-A>`, where `old-A` is the S of A's preflight.
 3. A squash or rebase merge gives A's commits new hashes, so a plain rebase would replay them as duplicates. Each child rebases only its own commits. Send each worker its command, with the SHA you recorded:
    - Direct child with a PR (B): `git fetch origin && git rebase --onto origin/main <old-A> <B-branch>`, re-verify, `git push --force-with-lease`; then you run `gh pr edit <B> --base main` and set B's `base` to `main` in `state.js`.
    - Grandchild (C), after B's force-push lands: `git rebase --onto origin/<B-branch> <old-B> <C-branch>`, `git push --force-with-lease`. Its PR base stays `<B-branch>`.

@@ -70,7 +70,7 @@ The body follows on the next lines. A worker's message starts a hub turn, or wai
 
 ## Hub to worker
 
-`reply --id <askId>` and `send` are both `SendMessage` with `to: <the worker's session id>`. The message arrives in the worker as a new turn and wakes it when it is idle. `askId` holds the `at` time of the ask being answered, from live.js `hub` (run `node <hub>/sync.cjs --once` first when it is not listed yet); clear it when you reply.
+`reply --id <askId>` and `send` are both `SendMessage` with `to: <the worker's session id>`. The message arrives in the worker as a new turn and wakes it when it is idle. `askId` holds the `at` time of the ask being answered, from live.js `hub` (run `node <hub>/sync.cjs --once` first when it is not listed yet); clear it when you reply. A session keeps its id however often you write to it, so the Loop's rule about the new dispatch id a `send` returns does not apply here.
 
 ## Protocol on the Claude app
 
@@ -81,7 +81,7 @@ When you write `protocol.md` and each task part from [worker-spec.md](worker-spe
 - Write each `orca orchestration send --type status --phase <p> --subject "<item-id>: <s>" --body "<b>"` as `VERA status <item-id> phase=<p>: <s>` (the id once, in the prefix) with `<b>` as the body, and `send --phase approval` as `VERA status <item-id> phase=approval: <the command it waits on>`.
 - Write each worker_done with `--outcome <o>`, and "the worker_done command from your Orca preamble", as `VERA done <item-id> outcome=<o>: <subject>`.
 - Rule 12: "its sync reads your session's transcript" for "Orca shows your current activity".
-- Rule 13: leave out the sentences that start "As a Codex worker" and "For a Codex worker", and the Codex refusal sentence.
+- Rule 13: leave out every sentence and clause about Codex.
 - Task part, "Base": in place of the worktree line, write: `The app created this worktree with its own branch name and base. Before any other work, and only while the branch has no commit of yours: git fetch origin && git branch -m <branch> && git reset --hard <base ref> (<sha>).` Keep the PR base and the rest.
 
 ## Escalations

@@ -343,3 +343,38 @@ test("the skill says when rewritten rules reach a running worker, and to record 
   assert.match(bullet, /`ok: false` \(`start_failed`\) means the worker did not reopen/);
   assert.match(cleanup, /`retained` with `ownership_transferred` means the row holds an id a later `send` replaced/);
 });
+
+// From an independent audit of the instructions and the guards.
+test("the merge preflight hashes, checks and merges one commit, taken from git and not from a worker", () => {
+  const merging = fs.readFileSync(path.join(__dirname, "..", "skills", "hub", "references", "merging.md"), "utf8");
+  assert.match(merging, /git -C <repo path> rev-parse origin\/<head-branch>\s+# S: must equal headRefOid above/);
+  assert.match(merging, /<the changed-lines hash at S, review\.md>/);
+  assert.match(merging, /Take it from `git rev-parse` here, never from a worker's message/);
+  assert.match(merging, /--match-head-commit <S>/);
+  assert.doesNotMatch(merging, /<approved head>/);
+});
+
+test("the hub runs the hash and the walkthrough check from the skill's folder, not from the folder workers write in", () => {
+  const dir = path.join(__dirname, "..", "skills", "hub", "references");
+  const review = fs.readFileSync(path.join(dir, "review.md"), "utf8"), walk = fs.readFileSync(path.join(dir, "walkthrough.md"), "utf8");
+  assert.match(review, /node <this skill's folder>\/templates\/diffhash\.cjs <dir> origin\/<base> <head>/);
+  assert.match(review, /Run this skill's copy, never `<hub>\/diffhash\.cjs`/);
+  assert.match(walk, /then `node <this skill's folder>\/templates\/walkcheck\.cjs <hub>\/walkthroughs/);
+});
+
+test("a developer's change to an approved PR has a message, a worker rule, and an item state", () => {
+  const dir = path.join(__dirname, "..", "skills", "hub", "references");
+  const merging = fs.readFileSync(path.join(dir, "merging.md"), "utf8"), spec = fs.readFileSync(path.join(dir, "worker-spec.md"), "utf8");
+  assert.match(merging, /Set the item `pr`, phases 6, and `send` the worker `CHANGES: <each change, with file:line>` \(protocol rule 6c\)/);
+  assert.match(spec, /`CHANGES: <list>`[^\n]*After `APPROVED` it comes by `send`: make each change test-first, push \(`git push`\), wait for green CI, write the after-approval round \(f\), and send worker_done with "follow-up: changes"/);
+  // The worker's baseline moves with each after-approval round, as the hub's reviewedDiff does.
+  assert.match(spec, /After each round you write under this rule, keep the hash at that round's head in its place/);
+});
+
+test("a hash the resume could not convert is reviewed, not sent back for a round", () => {
+  const skill = fs.readFileSync(path.join(__dirname, "..", "skills", "hub", "SKILL.md"), "utf8");
+  const bullet = skill.split("\n").find(l => l.startsWith("   - Hash form"));
+  assert.match(bullet, /leave the item's hashes and set its `reviewPending: true`/);
+  assert.match(bullet, /If the hash you kept after APPROVED already equals what the command without --v1 prints, there is nothing to do/);
+  assert.match(skill, /7\. A PR that changes what guards the run or the repo: CI workflows/);
+});

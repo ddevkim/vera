@@ -124,7 +124,8 @@ test("after a compaction the hub checks the protocol hash, and resumes fully onl
   const m = skill.match(/\*\*After a compaction\.\*\*[^\n]*/);
   assert.ok(m, "SKILL.md has no After a compaction paragraph");
   const order = ["run the inbox reconcile", "Then run `protocolhash.cjs` as step 5 does",
-    "When it prints the `protocolFrom` in `state.js` and `<hub>/protocol.new.md` does not exist, skip the rest of step 1",
+    // hashForm too: protocolhash.cjs does not see templates/, so a resume cut short after it copied a new diffhash.cjs would otherwise be skipped.
+    "When it prints the `protocolFrom` in `state.js`, `state.js` has `hashForm: 2`, and `<hub>/protocol.new.md` does not exist, skip the rest of step 1",
     "Otherwise the skill changed, or a resume was cut short: do the Resume bullets of step 1 now, except the one about a review that ran in the old session",
     "Do not restart a review"];
   const at = order.map(s => m[0].indexOf(s));
