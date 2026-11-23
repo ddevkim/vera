@@ -361,7 +361,8 @@ test("the gh pr merge deny rules are written at medium and high and not at low",
 });
 
 test("a worktree written before the gh pr merge deny rules still removes, checks and changes level cleanly", () => {
-  for (const next of [["remove"], ["write", "low"], ["write", "high"]]) {
+  // write at the same level is what a resumed hub runs: it must bring the rules up to date too.
+  for (const next of [["remove"], ["write", "low"], ["write", "medium"], ["write", "high"]]) {
     const l = lab();
     const record = path.join(l.wt, ".git", "vera-hub-allow.json");
     const before = snapshot(l.wt, (p) => p.endsWith(".git"));
@@ -378,9 +379,9 @@ test("a worktree written before the gh pr merge deny rules still removes, checks
     assert.notStrictEqual(l.run("check", l.wt).code, 0, "check passed while the old rules exist");
     const r = l.run(next[0], l.wt, ...next.slice(1));
     assert.strictEqual(r.code, 0, `${next.join(" ")}: ${r.out}`);
-    if (next[0] === "write" && next[1] === "high") {
+    if (next[0] === "write" && next[1] !== "low") {
       const { deny } = JSON.parse(fs.readFileSync(l.file, "utf8")).permissions;
-      for (const m of MERGE_DENY) assert.ok(deny.includes(m), `a level change did not add ${m}`);
+      for (const m of MERGE_DENY) assert.ok(deny.includes(m), `${next.join(" ")} did not add ${m}`);
       assert.strictEqual(l.run("remove", l.wt).code, 0);
     }
     assert.deepStrictEqual(snapshot(l.wt, (p) => p.endsWith(".git")), before, next.join(" "));
