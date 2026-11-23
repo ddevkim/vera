@@ -172,3 +172,53 @@ test("walkcheck still reports a flow file that does not exist at the head as a p
   assert.ok(!/cannot check/.test(r.out));
   assert.ok(!fs.existsSync(r.diff));
 });
+
+// An entry that is not an object (null, an array, a string, a number) in a list of records is a problem in the
+// walkthrough, named by where it is: exit 1 with one line each, never a stack trace. The page reads fields off each
+// entry, so one such entry would leave its step blank.
+test("walkcheck reports a list entry that is not an object as a problem, not a crash", t => {
+  const s = setup(t);
+  s.data.files.push(null);
+  s.data.map.nodes.push(null);
+  s.data.map.links.push("app");
+  s.data.flow.push(7);
+  s.data.edges = [null, { name: "empty", steps: [null] }];
+  s.data.tests = [[]];
+  s.data.changes = [null];
+  s.data.purpose.notHere = [null];
+  s.data.design = [null];
+  s.data.data = [null];
+  s.data.injections = [null];
+  s.data.risks = [null];
+  s.data.qa = [null];
+  s.data.review = [{ round: 1, findings: [null] }, null];
+  const r = walkcheck(s, s.data);
+  assert.strictEqual(r.code, 1, r.err);
+  assert.strictEqual(r.err, "");
+  const lines = r.out.split("\n");
+  for (const where of ["files[2]", "map.nodes[2]", "map.links[1]", "flow[1]", "edges[0]", "edges[1].steps[0]", "tests[0]", "changes[0]",
+    "purpose.notHere[0]", "design[0]", "data[0]", "injections[0]", "risks[0]", "qa[0]", "review[0].findings[0]", "review[1]"])
+    assert.ok(lines.includes(`${where}: not an object`), `reports ${where}:\n${r.out}`);
+  assert.ok(!fs.existsSync(r.diff));
+});
+
+test("walkcheck counts only objects as spec lines", t => {
+  const s = setup(t);
+  s.data.purpose.spec = [null];
+  const r = walkcheck(s, s.data);
+  assert.strictEqual(r.code, 1, r.err);
+  const lines = r.out.split("\n");
+  assert.ok(lines.includes("purpose.spec[0]: not an object"), r.out);
+  assert.ok(lines.includes("missing field: purpose.spec"), r.out);
+});
+
+test("walkcheck checks the spec entries of a docs walkthrough too, though it needs none", t => {
+  const s = setup(t);
+  s.data.kind = "docs";
+  s.data.purpose.spec = [null];
+  const r = walkcheck(s, s.data);
+  assert.strictEqual(r.code, 1, r.err);
+  const lines = r.out.split("\n");
+  assert.ok(lines.includes("purpose.spec[0]: not an object"), r.out);
+  assert.ok(!lines.includes("missing field: purpose.spec"), r.out);
+});
