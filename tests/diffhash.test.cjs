@@ -8,6 +8,7 @@ const { execFileSync, spawnSync } = require("node:child_process");
 
 const DIFFHASH = path.join(__dirname, "..", "skills", "hub", "templates", "diffhash.cjs");
 // The pipeline review.md and worker-spec.md documented before diffhash.cjs; hubs already running hold hashes made by it.
+// `diffhash.cjs --v1` still prints that hash, so a hub can tell whether an old hash it holds describes the PR as it is.
 const PIPELINE = "git -c core.quotePath=false -C \"$1\" diff --no-ext-diff --no-color --no-renames --src-prefix=a/ --dst-prefix=b/ \"$2...$3\" | grep -E '^(diff --git|[+-]|Binary files|old mode|new mode)' | git hash-object --stdin";
 // Ignore the machine's git config (signing, hooks, default branch) so the run is the same locally and on CI.
 const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: "1",
@@ -53,6 +54,7 @@ const hashOf = (...args) => {
   assert.match(r.out, /^[0-9a-f]{40}\n$/);
   return r.out.trim();
 };
+const v1Of = (...args) => hashOf("--v1", ...args);
 const failsClosed = (r) => {
   assert.strictEqual(r.code, 2);
   assert.match(r.out, /^cannot hash: /);
@@ -67,13 +69,14 @@ test("each diffhash test removes its temp folder", async t => {
   assert.strictEqual(fs.existsSync(root), false);
 });
 
-test("diffhash prints the documented pipeline's hash for modified, added, deleted, mode, and binary changes", t => {
+test("diffhash --v1 prints the documented pipeline's hash for modified, added, deleted, mode, and binary changes", t => {
   const s = setup(t);
   const diff = git(s.wt, "diff", "--no-renames", "origin/main...HEAD");
   for (const want of ["old mode", "new file mode", "deleted file mode", "Binary files"]) assert.ok(diff.includes(want), want);
   const want = pipeline(s.wt, "origin/main", "HEAD");
   assert.match(want, /^[0-9a-f]{40}$/);
-  assert.strictEqual(hashOf(s.wt, "origin/main", "HEAD"), want);
+  assert.strictEqual(v1Of(s.wt, "origin/main", "HEAD"), want);
+  assert.notStrictEqual(hashOf(s.wt, "origin/main", "HEAD"), want, "the two forms never share a hash");
 });
 
 test("a clean rebase onto a newer base keeps the hash", t => {
@@ -186,10 +189,11 @@ const PARITY = [
     d => { put(d, "sub/a.txt", "b\n"); put(d, "top.txt", "u\n"); }, "sub"],
 ];
 for (const [name, base, change, sub] of PARITY) {
-  test(`diffhash equals the pipeline: ${name}`, t => {
+  test(`diffhash --v1 equals the pipeline: ${name}`, t => {
     const s = build(t, base, change);
     const dir = sub ? path.join(s.wt, sub) : s.wt;
-    assert.strictEqual(hashOf(dir, "origin/main", "HEAD"), pipeline(dir, "origin/main", "HEAD"));
+    assert.strictEqual(v1Of(dir, "origin/main", "HEAD"), pipeline(dir, "origin/main", "HEAD"));
+    hashOf(dir, "origin/main", "HEAD");
   });
 }
 
@@ -296,4 +300,90 @@ test("a failure reason never holds 40 hex characters, even glued to a word or in
     failsClosed(r);
     assert.doesNotMatch(r.out, /[0-9a-f]{40}/i);
   }
+});
+
+// Where a change sits. app.txt holds ten numbered lines; the feature branch adds one line after line `after`.
+const TEN = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`);
+const withAdded = after => [...TEN.slice(0, after), "added", ...TEN.slice(after)].join("\n") + "\n";
+const placed = (t, after) => build(t, d => put(d, "app.txt", TEN.join("\n") + "\n"), d => put(d, "app.txt", withAdded(after)));
+
+test("moving an added line past an unchanged line changes the hash, which the old form missed", t => {
+  const a = placed(t, 3), b = placed(t, 7);
+  assert.strictEqual(v1Of(a.wt, "origin/main", "HEAD"), v1Of(b.wt, "origin/main", "HEAD"), "the old form saw only the added line");
+  assert.notStrictEqual(hashOf(a.wt, "origin/main", "HEAD"), hashOf(b.wt, "origin/main", "HEAD"));
+});
+
+test("a rebase onto a base that changed a line two lines away keeps the hash", t => {
+  const s = placed(t, 5); // "added" sits between line 5 and line 6
+  const before = hashOf(s.wt, "origin/main", "HEAD");
+  put(s.origin, "app.txt", TEN.map(l => (l === "line 4" || l === "line 7" ? `${l} changed` : l)).join("\n") + "\n");
+  put(s.origin, "above.txt", "x\n");
+  git(s.origin, "commit", "-qam", "nearby lines");
+  git(s.wt, "fetch", "-q", "origin");
+  git(s.wt, "rebase", "-q", "origin/main");
+  assert.strictEqual(hashOf(s.wt, "origin/main", "HEAD"), before);
+});
+
+test("a base that changed a line next to the PR's change makes the rebase conflict, so no clean rebase changes the hash", t => {
+  for (const touched of ["line 5", "line 6"]) {
+    const s = placed(t, 5);
+    put(s.origin, "app.txt", TEN.map(l => (l === touched ? `${l} changed` : l)).join("\n") + "\n");
+    git(s.origin, "commit", "-qam", "the neighbouring line");
+    git(s.wt, "fetch", "-q", "origin");
+    const r = spawnSync("git", ["rebase", "origin/main"], { cwd: s.wt, env, encoding: "utf8" });
+    assert.notStrictEqual(r.status, 0, `git rebased cleanly over a change to ${touched}`);
+    assert.match(r.stdout + r.stderr, /CONFLICT/);
+  }
+});
+
+test("diff.context, diff.interHunkContext and diff.indentHeuristic do not change the hash", t => {
+  const s = placed(t, 5);
+  const before = hashOf(s.wt, "origin/main", "HEAD");
+  git(s.wt, "config", "diff.context", "7");
+  git(s.wt, "config", "diff.interHunkContext", "5");
+  git(s.wt, "config", "diff.indentHeuristic", "false");
+  assert.strictEqual(hashOf(s.wt, "origin/main", "HEAD"), before);
+});
+
+test("a function name or line number in the hunk header does not change the hash", t => {
+  const body = n => ["function f() {", ...Array.from({ length: n }, (_, i) => `  pad${i}();`), "  a();", "  b();", "  c();", "}"].join("\n") + "\n";
+  const hashFor = (name, pad) => {
+    const s = build(t, d => put(d, "f.js", body(pad).replace("f()", `${name}()`)), d => put(d, "f.js", body(pad).replace("f()", `${name}()`).replace("  b();", "  b(1);")));
+    assert.match(git(s.wt, "diff", "origin/main...HEAD"), new RegExp(`@@ function ${name}\\(\\)`), "the fixture's hunk header names the function");
+    return hashOf(s.wt, "origin/main", "HEAD");
+  };
+  assert.strictEqual(hashFor("f", 5), hashFor("g", 9));
+});
+
+test("--v1 fails closed like the new form", t => {
+  const s = setup(t);
+  failsClosed(diffhash("--v1", s.wt, "origin/nope", "HEAD"));
+  failsClosed(diffhash("--v1", s.wt, "origin/main", "origin/main"));
+  failsClosed(diffhash("--v1", s.wt, "origin/main"));
+});
+
+// A hub that was running when the hash form changed holds hashes in the old form. Without a conversion every item would
+// look changed after a resume and be sent back for a walkthrough round nobody needs.
+const skillDir = path.join(__dirname, "..", "skills", "hub");
+const doc = f => fs.readFileSync(path.join(skillDir, f), "utf8");
+
+test("a resumed hub converts the hashes it holds in the old form, once", () => {
+  const m = doc("SKILL.md").match(/\n {3}\*\*Resume\*\* an existing hub:\n([\s\S]*?)\n2\. \*\*Read the repo/);
+  const bullet = m[1].split("\n").find(l => l.startsWith("   - Hash form"));
+  assert.ok(bullet, "Resume has no hash form bullet");
+  assert.match(bullet, /No `hashForm: 2` in `state\.js`/);
+  const order = ["with `--v1` before `<dir>`", "When it prints the item's `reviewedDiff`", "store what the command without `--v1` prints in its place",
+    "leave the item's hashes", "`send` each live worker whose item has `walkApproved`", "Then set `hashForm: 2`"];
+  const at = order.map(s => bullet.indexOf(s));
+  at.forEach((n, i) => assert.ok(n >= 0, `the hash form bullet says: ${order[i]}`));
+  assert.deepStrictEqual([...at].sort((a, b) => a - b), at, "convert, tell the workers, then record: a resume cut short converts again");
+  assert.match(doc("templates/state.js"), /^ {2}hashForm: 2,/m, "a new hub starts in the current form");
+  assert.match(doc("references/upgrade.md"), /Then add `hashForm: 2`/);
+});
+
+test("review.md says what the hash covers and what it cannot see", () => {
+  const text = doc("references/review.md");
+  assert.match(text, /the one unchanged line on each side of every change/);
+  assert.match(text, /What it cannot see: a change moved between two places whose neighbouring lines are the same/);
+  assert.doesNotMatch(text, /hashes them as a git blob/);
 });
