@@ -113,7 +113,10 @@ function runArgs(args) {
     fs.writeFileSync(path.join(dir, name), "#!/bin/sh\n" + body + "\n");
     fs.chmodSync(path.join(dir, name), 0o755);
   }
-  const r = spawnSync(process.execPath, [SCRIPT, ...args], { env: { PATH: dir }, encoding: "utf8", timeout: 20000 });
+  // A home of its own with the transcripts folder the Claude app check looks for: the machine's own home must not matter.
+  const home = path.join(dir, "home");
+  fs.mkdirSync(path.join(home, ".claude", "projects"), { recursive: true });
+  const r = spawnSync(process.execPath, [SCRIPT, ...args], { env: { PATH: dir, HOME: home, USERPROFILE: home }, encoding: "utf8", timeout: 20000 });
   fs.rmSync(dir, { recursive: true, force: true });
   return { code: r.status, out: r.stdout };
 }
