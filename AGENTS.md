@@ -4,7 +4,7 @@ Vera is a set of agent skills shipped as one plugin for Claude Code and Codex. T
 
 ## Check
 
-- Run `node --test` from the repo root before you push. CI runs the same command on Node 24, and there is no build step.
+- Run `node --test` from the repo root before you push. CI runs the same command on Node 18 (the oldest `README.md` allows) and Node 26, and there is no build step.
 - Many tests read the instruction text itself (`tests/skill-text.test.cjs`, `tests/readme.test.cjs`). When you reword a sentence a test quotes, change the test in the same commit and say why in the PR.
 
 ## Where things live
