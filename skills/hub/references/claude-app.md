@@ -44,7 +44,7 @@ In SKILL.md step 6, in place of `orca orchestration worker-start` and the `orca 
 | `name` | `<id>-<slug>` in lowercase, `[a-z0-9-]`, at most 24 characters |
 | `prompt` | `You are the Vera worker for <id>. Read <hub>/specs/<id>.md in full before anything else and follow it exactly. Send every hub message with SendMessage to <hubSession>.` |
 | `background` | the feature's goal in two or three sentences from `spec.md` (at least 80 characters) |
-| `model` | the standing choice; omit it to use the hub's model |
+| `model` | the alias you choose for this item ([worker-model.md](worker-model.md)); omit it only when the lookup there failed, to use the hub's model. The tool has no effort field here: that file says what a step is without one |
 | `permission_mode` | omit it: the worker inherits the hub's mode. A worker in another mode holds the hub's messages for approval |
 
 **Which turns can start a worker.** The app refuses `start_session` in a turn that another session's message started (a worker's VERA message, or a `<side-sessions-event>` that does not follow the developer's own turn) and offers a proposal card instead. So start workers only in a turn the developer started: step 6 on a new hub, a resume, or any turn where the developer answered or asked something. When a worker's message frees a slot (a `worker_done`, a merge approval you handled in that turn), do not call `start_session` and do not propose a card: set each item that can now start to `ext` "다음에 말씀하시면 시작합니다", add one to-do to `ask` saying that any reply to the hub starts it ("허브에 아무 말이나 답하시면 N3 를 시작합니다"), and start it in the developer's next turn. A refusal in a turn you thought was the developer's means the same: leave the item waiting as above, never retry in a loop.

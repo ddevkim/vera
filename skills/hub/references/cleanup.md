@@ -33,4 +33,4 @@ When the last item merged, or when the developer closes the hub early (park or d
    3. Otherwise the hub renamed nothing: `--comment "" --read` only.
 
    A parent that is the hub's own workspace keeps the hub's name only if the developer asks for that. No `--workspace-status`: the hub never set the parent's board status. Never remove the parent workspace.
-4. Final report per item: PR link, merge SHA, evidence, review rounds, walkthrough link and the changes after its approval, follow-ups (non-blocking findings, overruled findings, deferred contract steps); then kept branches, bundles, and leftover patches. The hub folder and the dashboard tab stay as the record.
+4. Final report per item: PR link, merge SHA, evidence, review rounds, walkthrough link and the changes after its approval, follow-ups (non-blocking findings, overruled findings, deferred contract steps); then each worker you started off the baseline model or effort, with its reason ([worker-model.md](worker-model.md)); then kept branches, bundles, and leftover patches. The hub folder and the dashboard tab stay as the record.

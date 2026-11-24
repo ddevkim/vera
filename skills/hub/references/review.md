@@ -32,7 +32,7 @@ Run this skill's copy, never `<hub>/diffhash.cjs`: workers write in the hub fold
 
 ## Who
 
-The reviewer the developer chose in the standing choices. Default: a subagent you start in the background with your agent tool, using a code-review agent type when the session has one (for example `code-reviewer`), else a general-purpose one. Alternative: an Orca worker of a different agent (`worker-start --agent codex`, the brief below as its spec, told not to change any file) when the developer wants a second model to look.
+The reviewer the developer chose in the standing choices. Default: a subagent you start in the background with your agent tool, using a code-review agent type when the session has one (for example `code-reviewer`), else a general-purpose one. Alternative: an Orca worker of a different agent (`worker-start --agent codex`, the brief below as its spec, told not to change any file, with the model and effort from [worker-model.md](worker-model.md), "The reviewer") when the developer wants a second model to look.
 
 ## Brief
 
