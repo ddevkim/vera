@@ -20,12 +20,18 @@ test("every repo path AGENTS.md names exists", () => {
   for (const p of paths) assert.ok(fs.existsSync(path.join(root, p)), `AGENTS.md names ${p}, which does not exist`);
 });
 
-test("AGENTS.md names the check command and the Node version CI uses", () => {
+test("AGENTS.md names the check command and the Node versions CI uses", () => {
   const ci = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8");
   const runs = [...ci.matchAll(/- run: (.+)/g)].map(m => m[1].trim());
   assert.deepStrictEqual(runs, ["node --test"], "ci.yml runs one command; AGENTS.md says which");
   assert.ok(agents.includes("`node --test`"), "AGENTS.md names node --test");
-  const node = ci.match(/node-version: "(\d+)"/);
-  assert.ok(node, "ci.yml pins a Node version");
-  assert.ok(agents.includes(`Node ${node[1]}`), `AGENTS.md says CI runs Node ${node[1]}`);
+  const matrix = ci.match(/node: \[([^\]]+)\]/);
+  assert.ok(matrix && ci.includes("node-version: ${{ matrix.node }}"), "ci.yml runs a matrix of Node versions");
+  const nodes = [...matrix[1].matchAll(/"(\d+)"/g)].map(m => m[1]);
+  assert.ok(nodes.length >= 2, "ci.yml runs the oldest allowed Node and a current one");
+  for (const n of nodes) assert.ok(agents.includes(`Node ${n}`), `AGENTS.md says CI runs Node ${n}`);
+  // The oldest Node in CI is the one README.md promises and preflight.cjs enforces.
+  const oldest = String(Math.min(...nodes.map(Number)));
+  assert.ok(fs.readFileSync(path.join(root, "README.md"), "utf8").includes(`\`node\` ${oldest} or newer`), `README.md allows node ${oldest} or newer`);
+  assert.ok(fs.readFileSync(path.join(root, "skills", "hub", "scripts", "preflight.cjs"), "utf8").includes(`major >= ${oldest}`), `preflight.cjs refuses a node older than ${oldest}`);
 });
