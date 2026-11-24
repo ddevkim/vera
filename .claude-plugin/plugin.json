@@ -1,6 +1,6 @@
 {
   "name": "vera",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Deprecated: Vera moved to the mco marketplace at marpple/vera. Remove this install, then install vera@mco from marpple/vera",
   "author": {
     "name": "ddevkim"
