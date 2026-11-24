@@ -9,13 +9,13 @@ const readme = () => fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
 const HANGUL = /[ᄀ-ᇿ㄰-㆏가-힯]/;
 
 const INSTALL = [
-  "claude plugin marketplace add ddevkim/vera",
-  "claude plugin install vera@vera",
-  "/plugin marketplace add ddevkim/vera",
-  "/plugin install vera@vera",
-  "codex plugin marketplace add ddevkim/vera",
-  "codex plugin add vera@vera",
-  "npx skills add ddevkim/vera --skill hub"
+  "claude plugin marketplace add marpple/vera",
+  "claude plugin install vera@mco",
+  "/plugin marketplace add marpple/vera",
+  "/plugin install vera@mco",
+  "codex plugin marketplace add marpple/vera",
+  "codex plugin add vera@mco",
+  "npx skills add marpple/vera --skill hub"
 ];
 
 const RUN_UPDATE_REMOVE = [
@@ -44,6 +44,14 @@ test("README is titled Vera and gives the invoke, update, and uninstall commands
   const text = readme();
   assert.match(text, /^# Vera$/m);
   for (const cmd of RUN_UPDATE_REMOVE) assert.ok(text.includes(cmd), `missing command: ${cmd}`);
+});
+
+test("README says this repo is deprecated and where Vera moved", () => {
+  const text = readme();
+  assert.match(text.split("\n").slice(0, 4).join("\n"), /\*\*Deprecated\.\*\*[^\n]*https:\/\/github\.com\/marpple\/vera/);
+  const start = text.indexOf("\n### Move to marpple/vera\n");
+  assert.ok(start > 0, "README has no Move to marpple/vera section");
+  assert.match(text.slice(start, text.indexOf("\n### ", start + 1)), /\[Uninstall\]\(#uninstall\)/);
 });
 
 test("every relative link and image path in README exists", () => {

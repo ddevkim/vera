@@ -86,6 +86,7 @@ test("the marketplace and its plugin are both named vera, at the vera repo", () 
   assert.strictEqual(m.name, "vera");
   assert.deepStrictEqual(m.plugins.map((e) => e.name), ["vera"]);
   assert.match(m.metadata.description, /Vera/);
+  for (const d of [m.metadata.description, m.plugins[0].description, p.description]) assert.match(d, /^Deprecated: .*marpple\/vera/);
   assert.strictEqual(p.name, "vera");
   assert.strictEqual(p.homepage, "https://github.com/ddevkim/vera");
   assert.strictEqual(p.repository, "https://github.com/ddevkim/vera");
