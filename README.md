@@ -1,5 +1,7 @@
 # Vera
 
+> **Deprecated.** Vera moved to [marpple/vera](https://github.com/marpple/vera), in the marketplace named `mco`. This repo and its `vera` marketplace get no more releases. See [Move to marpple/vera](#move-to-marpplevera).
+
 Vera is a set of agent skills by ddevkim for work that is verified before it is called done: built test-first, reviewed independently, and checked on its final state. *Vera* is Latin for "true things", as in verify and verdict. `hub` is the first skill; more may be added.
 
 | Skill | What it does |
@@ -48,27 +50,33 @@ Run a hub on a repo, and with instructions, you would give an agent session anyw
 
 ### Install
 
+Do not install from this repo: it is deprecated. Install Vera from `marpple/vera`.
+
 Claude Code:
 
 ```sh
-claude plugin marketplace add ddevkim/vera
-claude plugin install vera@vera
+claude plugin marketplace add marpple/vera
+claude plugin install vera@mco
 ```
 
-Inside a Claude Code session: `/plugin marketplace add ddevkim/vera`, then `/plugin install vera@vera`.
+Inside a Claude Code session: `/plugin marketplace add marpple/vera`, then `/plugin install vera@mco`.
 
 Codex:
 
 ```sh
-codex plugin marketplace add ddevkim/vera
-codex plugin add vera@vera
+codex plugin marketplace add marpple/vera
+codex plugin add vera@mco
 ```
 
 Other agents, with the `skills` CLI:
 
 ```sh
-npx skills add ddevkim/vera --skill hub
+npx skills add marpple/vera --skill hub
 ```
+
+### Move to marpple/vera
+
+If you installed Vera from this repo, remove that install as in [Uninstall](#uninstall), then install as above. The skill keeps its name, `/vera:hub`, and a hub folder you already have is not touched.
 
 ### Start a hub
 

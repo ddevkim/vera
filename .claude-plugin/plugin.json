@@ -1,7 +1,7 @@
 {
   "name": "vera",
   "version": "0.6.0",
-  "description": "Build a discussed feature as PRs through worker sessions in Orca or the Claude desktop app, with walkthroughs and a live dashboard",
+  "description": "Deprecated: Vera moved to the mco marketplace at marpple/vera. Remove this install, then install vera@mco from marpple/vera",
   "author": {
     "name": "ddevkim"
   },
