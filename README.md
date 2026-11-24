@@ -80,13 +80,15 @@ Run it from any Orca terminal: Orca's sidebar shows the hub's workspace, or the 
 The hub then asks you for:
 
 - confirmation of the spec it wrote from your discussion,
-- once, whether to keep its run defaults (the worker agent and model, how many workers run at a time, the PR assignee),
+- once, whether to keep its run defaults (the worker agent, how many workers run at a time, the PR assignee),
 - product decisions it should not guess,
 - a walkthrough of each PR before the PR opens,
 - approval of each merge,
 - permission prompts in worker terminals.
 
 That list is the **Low** autonomy level, the default. Tell the hub at the start or at any time to run at **Medium** (PRs open after the independent review, workers may push, open PRs, and delete files in their worktree without a prompt; you still answer product decisions and approve merges) or **High** (the hub also decides product questions, merges on green CI, and runs the repo's documented deploy steps, stopping only for risky steps such as dropping data, spending money, or changing secrets).
+
+The hub picks each worker's model and reasoning effort itself and does not ask you. It looks up what the agent offers at each start, so a newly released model is used without a new version of this plugin. An ordinary item runs one family below the most capable model at `high` effort. A risky or foundational item goes one step up and a mechanical or docs-only one goes one step down, never more than one step. Name a model or an effort to the hub to override it.
 
 ### In the Claude desktop app
 

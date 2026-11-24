@@ -47,6 +47,7 @@ window.HUB_STATE = {
     //       or is reopened for a rebase or review fixes; does not count) | done (cleaned up; keep the row, the final sweep reads its path)
     { lane: "기반", item: "N2", worktree: "app-notify-n2-rules", state: "구현 중", tone: "active",
       dispatch: "ctx_xxxxxxxx", path: "/Users/me/orca/workspaces/app/app-notify-n2-rules" },  // dispatch, path: sync.cjs and cleanup use them (claude-app: session in place of dispatch)
+    // model, effort (bookkeeping, not rendered): what the hub chose for this worker when it started it (references/worker-model.md)
     { lane: "기반", item: "N1", worktree: "app-notify-n1-table", state: "병합 승인 대기", tone: "support",
       dispatch: "ctx_yyyyyyyy", path: "/Users/me/orca/workspaces/app/app-notify-n1-table" }
   ],
