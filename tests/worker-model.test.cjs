@@ -61,7 +61,7 @@ test("the choice stays within one step of the baseline, on one axis", () => {
 test("the start commands carry the choice and state.js records it", () => {
   assert.match(skill, /--agent <agent> --model <model> --effort <effort> --json/);
   assert.doesNotMatch(skill, /\[--model <model>\]/);
-  assert.match(skill, /The worker failed at the work itself: clean it up and start a new worker one step up \(references\/worker-model\.md, "A replacement worker"\)/);
+  assert.match(skill, /The worker failed at the work itself: clean it up and start a new worker one step up, or set the item `blocked` when that section says so \(references\/worker-model\.md, "A replacement worker"\)/);
   assert.match(rule, /an item that ran a step down gets the baseline, and an item at the baseline goes up/);
   assert.match(rule, /An item that was already one step up, or whose replacement also fails at the work, gets no further worker: set it `blocked`/);
   assert.match(read("references/claude-app.md"), /\| `model` \| the alias you choose for this item \(\[worker-model\.md\]\(worker-model\.md\)\)/);

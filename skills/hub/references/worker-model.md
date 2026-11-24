@@ -21,7 +21,7 @@ Order the families from the lightest to the most capable. The names come from th
 
 The baseline is what an ordinary item gets, and every doubt resolves to it or above it.
 
-- **Model**: the family one below the most capable one the agent offers. The most capable family is kept for the items that need it. When the agent offers a single family, that one is the baseline and every step is an effort step.
+- **Model**: the family one below the most capable one the agent offers. The most capable family is kept for the items that need it. When the agent offers a single family (Codex, when only one model carries the newest version), that one is the baseline and every step is an effort step.
 - **Effort**: `high`.
 
 ## One step up or down
@@ -32,7 +32,7 @@ Judge each item as a whole from its spec: what it touches, what depends on it, a
 |---|---|---|
 | Up | Any of: a risky area ([splitting.md](splitting.md), check 4); a contract, schema, or shared design that other items build on; concurrency, transactions, or a state machine; code no test covers yet | The effort, when the item needs more care on a known path (a migration, a money write). The model, when it needs more capability (a design other items build on, subtle concurrency, a wide unfamiliar area) |
 | Baseline | Everything else | Nothing |
-| Down | All of: mechanical (a move, rename, or format), docs-only, or a small configuration or wording change; no risky area; nothing stacks on its design; the existing suite or one new test checks the whole outcome | The effort. The model instead only for a mechanical or docs-only item |
+| Down | All of: mechanical (a move, rename, or format), docs-only, or a small configuration or wording change; no risky area; nothing stacks on its design; the existing suite or one new test checks the whole outcome | The effort. The model instead only for a mechanical or docs-only item, and only when the agent offers a family lighter than the baseline |
 
 When you cannot decide between the baseline and down, use the baseline. When you cannot decide between the baseline and up, go up. When both reasons to go up fit one item (a migration on a schema other items build on), move the model.
 
@@ -44,11 +44,11 @@ A running worker keeps the model and effort it started with: a `send` continues 
 
 ## The reviewer
 
-A reviewer you start as an Orca worker ([review.md](review.md), "Who") gets a model and effort too: the baseline, or one step up when the item itself ran a step up. Never a step down.
+A reviewer you start as an Orca worker ([review.md](review.md), "Who") gets a model and effort too: the baseline, or one step up when the item itself ran a step up: a step on the reviewer's own agent, on the axis the item used. Never a step down.
 
 ## Starting and recording
 
-- Pass both flags to `worker-start`: `--model <model> --effort <effort>`. Orca refuses `--effort` without `--model`, and refuses a level the model does not support; when it refuses the level, use the nearest level it accepts.
+- Pass both flags to `worker-start`: `--model <model> --effort <effort>`. Orca refuses `--effort` without `--model`, and refuses a level the model does not support; when it refuses the level, use the nearest level it accepts toward `high`.
 - On the Claude app, set `model` in `start_session`, and the effort only when the tool has a field for it. Without one the worker runs at the app's effort, a step up is a model step, and a step down is a model step for a mechanical or docs-only item and the baseline for any other.
 - Write `model` and `effort` into the item's `workers` row in `state.js`, with the receipt.
 - Log a choice that is not the baseline with its reason, in the worker-start line: "N1 작업자를 한 단계 높은 effort(xhigh)로 시작했습니다: 마이그레이션". List these choices in the final report ([cleanup.md](cleanup.md)).
